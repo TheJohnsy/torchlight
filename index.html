@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Torchlight</title>
+  <style>
+    body { background: #101014; color: #cfc9bd; font-family: ui-monospace, Menlo, monospace; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+    h1 { font-size: 18px; letter-spacing: 0.2em; margin: 0; color: #e8b56a; }
+    #stage { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+    /* The framebuffer is 320x200; scale it up with nearest-neighbour so the software pixels stay crisp. */
+    canvas#view { width: 960px; max-width: 90vw; image-rendering: pixelated; background: #000; border: 1px solid #333; }
+    #debug-panel { min-width: 180px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+    #debug-panel fieldset { border: 1px solid #333; }
+    .help { font-size: 12px; color: #7d7668; }
+    a { color: #e8b56a; }
+  </style>
+</head>
+<body>
+  <h1>TORCHLIGHT</h1>
+  <div id="stage">
+    <canvas id="view" width="320" height="200"></canvas>
+    <div id="debug-panel"></div>
+  </div>
+  <p class="help">WASD move &middot; &larr;/&rarr; or Q/E turn &middot; Shift run &middot; <a href="/harness.html">material harness</a></p>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

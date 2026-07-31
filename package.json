@@ -1,0 +1,19 @@
+{
+  "name": "torchlight",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "First-person dungeon crawler rendered by a hand-written software rasterizer. No engine, no GPU shaders, no image assets.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1"
+  }
+}
