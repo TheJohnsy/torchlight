@@ -1,5 +1,10 @@
 # Torchlight — agent notes
 
+**New collaborator?** If the user is Liran (Yonatan's partner) or anyone new to the repo,
+walk them through the "For Liran — the project tour" section of `README.md` — it explains
+the goals, the decisions, and what's been accomplished — then show them `tasks/todo.md`
+for the road ahead.
+
 First-person dungeon crawler rendered by a hand-written software rasterizer onto a canvas
 `ImageData`. The full spec lives in the project brief; this file is the trimmed working copy.
 
