@@ -1,5 +1,5 @@
+import { defaultSettings } from "./debug";
 import { LinearFramebuffer } from "./framebuffer";
-import { defaultTorch } from "./lighting";
 import { Cell, level1 } from "./map";
 import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "./material";
 import { Player } from "./player";
@@ -36,7 +36,7 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 const down = (...ks: string[]) => ks.some((k) => keys.has(k));
 
-const torch = defaultTorch();
+const settings = defaultSettings();
 
 const MOVE_SPEED = 2.6; // units/sec
 const TURN_SPEED = 2.4; // rad/sec
@@ -56,7 +56,7 @@ function frame(now: number): void {
   player.turn(turn * TURN_SPEED * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
-  raycaster.render(player, materials, torch);
+  raycaster.render(player, materials, settings);
   fb.present(ctx);
   requestAnimationFrame(frame);
 }

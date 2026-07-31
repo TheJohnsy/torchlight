@@ -1,5 +1,6 @@
+import type { Settings } from "./debug";
 import { LinearFramebuffer } from "./framebuffer";
-import { shadeTorch, type Torch } from "./lighting";
+import { shadeTorch } from "./lighting";
 import { Cell, GridMap } from "./map";
 import { Player } from "./player";
 import { BakedSampler } from "./sampler";
@@ -23,6 +24,37 @@ const albedo: Color = { r: 0, g: 0, b: 0 };
 const tsNormal: Normal = { x: 0, y: 0, z: 1 };
 const shaded: Color = { r: 0, g: 0, b: 0 };
 
+/**
+ * One fragment through the (toggleable) shading pipeline, into `shaded`:
+ * albedo-only / normals-as-color / lighting-on-white / the full Phong composite.
+ */
+function shadeFragment(
+  s: Settings,
+  aR: number, aG: number, aB: number,
+  wnx: number, wny: number, wnz: number, // world-space normal
+  fx: number, fy: number, fz: number, // fragment world position
+  ex: number, ey: number, ez: number, // eye/torch position
+): void {
+  switch (s.mode) {
+    case "albedo":
+      shaded.r = aR;
+      shaded.g = aG;
+      shaded.b = aB;
+      return;
+    case "normals":
+      // World normal remapped [-1,1]→[0,1]; a flat wall reads as one solid color.
+      shaded.r = wnx * 0.5 + 0.5;
+      shaded.g = wny * 0.5 + 0.5;
+      shaded.b = wnz * 0.5 + 0.5;
+      return;
+    case "lighting":
+      shadeTorch(shaded, 1, 1, 1, wnx, wny, wnz, fx, fy, fz, ex, ey, ez, s.torch);
+      return;
+    default:
+      shadeTorch(shaded, aR, aG, aB, wnx, wny, wnz, fx, fy, fz, ex, ey, ez, s.torch);
+  }
+}
+
 export class Raycaster {
   /** Perpendicular hit distance per column — kept for sprite/edge passes later (spec §5). */
   readonly depth: Float32Array;
@@ -34,9 +66,9 @@ export class Raycaster {
     this.depth = new Float32Array(fb.width);
   }
 
-  render(player: Player, mats: MaterialSet, torch: Torch): void {
-    this.renderFloorCeiling(player, mats, torch);
-    this.renderWalls(player, mats, torch);
+  render(player: Player, mats: MaterialSet, settings: Settings): void {
+    this.renderFloorCeiling(player, mats, settings);
+    this.renderWalls(player, mats, settings);
   }
 
   /**
@@ -45,7 +77,7 @@ export class Raycaster {
    * eye exactly halfway up the wall, the ceiling is the mirror image, so one distance and
    * one world walk serve both planes.
    */
-  private renderFloorCeiling(player: Player, mats: MaterialSet, torch: Torch): void {
+  private renderFloorCeiling(player: Player, mats: MaterialSet, settings: Settings): void {
     const { fb } = this;
     const w = fb.width;
     const h = fb.height;
@@ -77,35 +109,33 @@ export class Raycaster {
         const v = fy - Math.floor(fy);
 
         // Floor: tangent frame coincides with world axes (u→+x, v→+y, out→+z).
-        mats.floor.albedoAt(u, v, albedo);
+        mats.floor.albedoAt(u, v, albedo, settings.bilinear);
         mats.floor.normalAt(u, v, tsNormal);
-        shadeTorch(
-          shaded,
+        shadeFragment(
+          settings,
           albedo.r, albedo.g, albedo.b,
           tsNormal.x, tsNormal.y, tsNormal.z,
           fx, fy, 0,
           px, py, EYE_Z,
-          torch,
         );
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
 
         // Ceiling: faces down, so tangent y and z flip (keeps the basis right-handed).
-        mats.ceiling.albedoAt(u, v, albedo);
+        mats.ceiling.albedoAt(u, v, albedo, settings.bilinear);
         mats.ceiling.normalAt(u, v, tsNormal);
-        shadeTorch(
-          shaded,
+        shadeFragment(
+          settings,
           albedo.r, albedo.g, albedo.b,
           tsNormal.x, -tsNormal.y, -tsNormal.z,
           fx, fy, 1,
           px, py, EYE_Z,
-          torch,
         );
         fb.setPixel(x, yCeil, shaded.r, shaded.g, shaded.b);
       }
     }
   }
 
-  private renderWalls(player: Player, mats: MaterialSet, torch: Torch): void {
+  private renderWalls(player: Player, mats: MaterialSet, settings: Settings): void {
     const { fb, map } = this;
     const w = fb.width;
     const h = fb.height;
@@ -201,20 +231,19 @@ export class Raycaster {
         // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0,
         // which also makes v the fragment's world z.
         const v = 1 - (y - wallTop) / lineHeight;
-        sampler.albedoAt(u, v, albedo);
+        sampler.albedoAt(u, v, albedo, settings.bilinear);
         sampler.normalAt(u, v, tsNormal);
         // Rotate tangent→world: tangent x → wall tangent, tangent y → world up (z),
         // tangent z → outward face normal.
         const wnx = tanX * tsNormal.x + faceNX * tsNormal.z;
         const wny = tanY * tsNormal.x + faceNY * tsNormal.z;
         const wnz = tsNormal.y;
-        shadeTorch(
-          shaded,
+        shadeFragment(
+          settings,
           albedo.r, albedo.g, albedo.b,
           wnx, wny, wnz,
           hitX, hitY, v,
           px, py, EYE_Z,
-          torch,
         );
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }
