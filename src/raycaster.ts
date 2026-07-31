@@ -35,6 +35,77 @@ export class Raycaster {
   }
 
   render(player: Player, mats: MaterialSet, torch: Torch): void {
+    this.renderFloorCeiling(player, mats, torch);
+    this.renderWalls(player, mats, torch);
+  }
+
+  /**
+   * Horizontal-span casting: every screen row below center maps to one fixed distance on
+   * the floor plane (similar triangles: rowDist = eyeZ·h / pixelsBelowCenter). With the
+   * eye exactly halfway up the wall, the ceiling is the mirror image, so one distance and
+   * one world walk serve both planes.
+   */
+  private renderFloorCeiling(player: Player, mats: MaterialSet, torch: Torch): void {
+    const { fb } = this;
+    const w = fb.width;
+    const h = fb.height;
+    const px = player.x;
+    const py = player.y;
+    const dirX = player.dirX;
+    const dirY = player.dirY;
+    const planeX = -dirY * PLANE_HALF;
+    const planeY = dirX * PLANE_HALF;
+    // Ray directions at the left and right screen edges; each row interpolates between them.
+    const rx0 = dirX - planeX;
+    const ry0 = dirY - planeY;
+    const rx1 = dirX + planeX;
+    const ry1 = dirY + planeY;
+    const halfH = h / 2;
+    const mid = h >> 1;
+
+    for (let y = mid + 1; y < h; y++) {
+      const p = y - halfH; // pixels below the horizon
+      const rowDist = (EYE_Z * h) / p;
+      const stepX = (rowDist * (rx1 - rx0)) / w;
+      const stepY = (rowDist * (ry1 - ry0)) / w;
+      let fx = px + rowDist * rx0;
+      let fy = py + rowDist * ry0;
+      const yCeil = h - 1 - y; // mirrored ceiling row (valid because EYE_Z = 0.5)
+
+      for (let x = 0; x < w; x++, fx += stepX, fy += stepY) {
+        const u = fx - Math.floor(fx);
+        const v = fy - Math.floor(fy);
+
+        // Floor: tangent frame coincides with world axes (u→+x, v→+y, out→+z).
+        mats.floor.albedoAt(u, v, albedo);
+        mats.floor.normalAt(u, v, tsNormal);
+        shadeTorch(
+          shaded,
+          albedo.r, albedo.g, albedo.b,
+          tsNormal.x, tsNormal.y, tsNormal.z,
+          fx, fy, 0,
+          px, py, EYE_Z,
+          torch,
+        );
+        fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
+
+        // Ceiling: faces down, so tangent y and z flip (keeps the basis right-handed).
+        mats.ceiling.albedoAt(u, v, albedo);
+        mats.ceiling.normalAt(u, v, tsNormal);
+        shadeTorch(
+          shaded,
+          albedo.r, albedo.g, albedo.b,
+          tsNormal.x, -tsNormal.y, -tsNormal.z,
+          fx, fy, 1,
+          px, py, EYE_Z,
+          torch,
+        );
+        fb.setPixel(x, yCeil, shaded.r, shaded.g, shaded.b);
+      }
+    }
+  }
+
+  private renderWalls(player: Player, mats: MaterialSet, torch: Torch): void {
     const { fb, map } = this;
     const w = fb.width;
     const h = fb.height;
@@ -126,7 +197,6 @@ export class Raycaster {
       const hitX = px + perpDist * rayDirX;
       const hitY = py + perpDist * rayDirY;
 
-      for (let y = 0; y < drawStart; y++) fb.setPixel(x, y, 0.02, 0.02, 0.025); // ceiling
       for (let y = drawStart; y <= drawEnd; y++) {
         // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0,
         // which also makes v the fragment's world z.
@@ -148,7 +218,6 @@ export class Raycaster {
         );
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }
-      for (let y = drawEnd + 1; y < h; y++) fb.setPixel(x, y, 0.05, 0.05, 0.055); // floor
     }
   }
 }
