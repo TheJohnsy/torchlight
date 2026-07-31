@@ -1,7 +1,9 @@
 import { LinearFramebuffer } from "./framebuffer";
-import { level1 } from "./map";
+import { Cell, level1 } from "./map";
+import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "./material";
 import { Player } from "./player";
-import { Raycaster } from "./raycaster";
+import { Raycaster, type MaterialSet } from "./raycaster";
+import { BakedSampler } from "./sampler";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
 const W = 320;
@@ -13,6 +15,16 @@ const fb = new LinearFramebuffer(W, H);
 const map = level1();
 const player = new Player(1.5, 1.5, 0);
 const raycaster = new Raycaster(fb, map);
+
+// Bake every procedural material once at startup (~a second of FBm; then the loop is free).
+const materials: MaterialSet = {
+  walls: new Map([
+    [Cell.Stone, new BakedSampler(new StoneMaterial())],
+    [Cell.Brick, new BakedSampler(new BrickMaterial())],
+  ]),
+  floor: new BakedSampler(new FloorMaterial()),
+  ceiling: new BakedSampler(new CeilingMaterial()),
+};
 
 // --- input -------------------------------------------------------------------------------
 const keys = new Set<string>();
@@ -41,7 +53,7 @@ function frame(now: number): void {
   player.turn(turn * TURN_SPEED * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
-  raycaster.render(player);
+  raycaster.render(player, materials);
   fb.present(ctx);
   requestAnimationFrame(frame);
 }

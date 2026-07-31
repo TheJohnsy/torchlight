@@ -1,15 +1,21 @@
 import { LinearFramebuffer } from "./framebuffer";
 import { Cell, GridMap } from "./map";
 import { Player } from "./player";
+import { BakedSampler } from "./sampler";
+import type { Color } from "./types";
 
 /** Half-width of the camera plane = tan(FOV/2); 0.66 ≈ 66° horizontal FOV. */
 const PLANE_HALF = 0.66;
 
-/** Phase-1 flat wall colors (linear space) until materials arrive. */
-const FLAT_COLOR: Record<number, [number, number, number]> = {
-  [Cell.Stone]: [0.32, 0.32, 0.34],
-  [Cell.Brick]: [0.36, 0.22, 0.18],
-};
+/** Which sampler covers which surface. */
+export interface MaterialSet {
+  walls: Map<Cell, BakedSampler>;
+  floor: BakedSampler;
+  ceiling: BakedSampler;
+}
+
+// Scratch objects reused across every pixel — the hot loop must not allocate.
+const albedo: Color = { r: 0, g: 0, b: 0 };
 
 export class Raycaster {
   /** Perpendicular hit distance per column — kept for sprite/edge passes later (spec §5). */
@@ -22,7 +28,7 @@ export class Raycaster {
     this.depth = new Float32Array(fb.width);
   }
 
-  render(player: Player): void {
+  render(player: Player, mats: MaterialSet): void {
     const { fb, map } = this;
     const w = fb.width;
     const h = fb.height;
@@ -94,12 +100,25 @@ export class Raycaster {
       const drawStart = Math.max(0, Math.ceil(wallTop));
       const drawEnd = Math.min(h - 1, Math.floor(wallTop + lineHeight));
 
-      // Phase 1: flat colors; y-sides darkened so faces read as distinct before lighting.
-      const [r, g, b] = FLAT_COLOR[cell] ?? FLAT_COLOR[Cell.Stone];
+      // --- texture u: where along the wall face did we hit? -----------------------------
+      // Fractional part of the non-stepped coordinate at the hit point.
+      let wallX = side === 0 ? py + perpDist * rayDirY : px + perpDist * rayDirX;
+      wallX -= Math.floor(wallX);
+      // Mirror u on faces we see "from behind" so texturing winds consistently around a block.
+      const flipU = (side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0);
+      const u = flipU ? 1 - wallX : wallX;
+
+      const sampler = mats.walls.get(cell) ?? mats.walls.get(Cell.Stone)!;
+      // y-sides darkened so faces stay distinct until real lighting lands (phase 4).
       const shade = side === 1 ? 0.7 : 1.0;
 
       for (let y = 0; y < drawStart; y++) fb.setPixel(x, y, 0.02, 0.02, 0.025); // ceiling
-      for (let y = drawStart; y <= drawEnd; y++) fb.setPixel(x, y, r * shade, g * shade, b * shade);
+      for (let y = drawStart; y <= drawEnd; y++) {
+        // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0.
+        const v = 1 - (y - wallTop) / lineHeight;
+        sampler.albedoAt(u, v, albedo);
+        fb.setPixel(x, y, albedo.r * shade, albedo.g * shade, albedo.b * shade);
+      }
       for (let y = drawEnd + 1; y < h; y++) fb.setPixel(x, y, 0.05, 0.05, 0.055); // floor
     }
   }
