@@ -62,6 +62,47 @@ export class StoneMaterial implements Material {
   }
 }
 
+/** Worn stone slabs (2x2 per grid cell) with grooves between them. */
+export class FloorMaterial implements Material {
+  private readonly slabs = 2;
+  private readonly bump = 0.3;
+
+  readonly height = (u: number, v: number): number => {
+    const rough = fbm2(u * 4 + 3.1, v * 4 + 9.7, 4, { period: 4 });
+    const lu = u * this.slabs - Math.floor(u * this.slabs);
+    const lv = v * this.slabs - Math.floor(v * this.slabs);
+    const groove = smoothstep(0.02, 0.09, Math.min(lu, 1 - lu)) *
+      smoothstep(0.02, 0.09, Math.min(lv, 1 - lv));
+    return mix(0.12 + 0.1 * rough, 0.35 + 0.65 * rough, groove);
+  };
+
+  albedo(u: number, v: number): Color {
+    const h = this.height(u, v);
+    return { r: mix(0.09, 0.38, h), g: mix(0.085, 0.35, h), b: mix(0.08, 0.3, h) };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
+
+/** Rough-hewn ceiling rock: same field family as the walls, darker and sootier. */
+export class CeilingMaterial implements Material {
+  private readonly bump = 0.35;
+
+  readonly height = (u: number, v: number): number =>
+    fbm2(u * 5 + 23.4, v * 5 + 47.9, 4, { period: 5 });
+
+  albedo(u: number, v: number): Color {
+    const h = this.height(u, v);
+    return { r: mix(0.05, 0.2, h), g: mix(0.045, 0.18, h), b: mix(0.04, 0.16, h) };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
+
 /**
  * Running-bond brickwork. The brick/mortar step function IS the height field, so the
  * bevelled edges fall out of the same gradient→normal machinery as the stone grain —
