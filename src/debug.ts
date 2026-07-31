@@ -8,6 +8,8 @@ export interface Settings {
   torch: Torch;
   /** Bilinear vs nearest texture sampling (stretch). */
   bilinear: boolean;
+  /** 2× supersampling anti-aliasing (stretch): render hi-res, box-resolve down. */
+  ssaa: boolean;
   /** Distance fog (stretch). */
   fog: boolean;
   fogDensity: number;
@@ -18,6 +20,7 @@ export function defaultSettings(): Settings {
     mode: "full",
     torch: defaultTorch(),
     bilinear: false,
+    ssaa: false,
     fog: false,
     fogDensity: 0.22,
   };
@@ -82,6 +85,11 @@ export function createDebugPanel(root: HTMLElement, settings: Settings): HTMLEle
   bilinear.checked = settings.bilinear;
   bilinear.addEventListener("change", () => (settings.bilinear = bilinear.checked));
   labeled(extras, bilinear, "bilinear filtering");
+  const ssaa = document.createElement("input");
+  ssaa.type = "checkbox";
+  ssaa.checked = settings.ssaa;
+  ssaa.addEventListener("change", () => (settings.ssaa = ssaa.checked));
+  labeled(extras, ssaa, "2× supersampling");
   const fog = document.createElement("input");
   fog.type = "checkbox";
   fog.checked = settings.fog;

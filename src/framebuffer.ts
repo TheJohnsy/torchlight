@@ -10,6 +10,43 @@ export function linearToByte(v: number): number {
 }
 
 /**
+ * Supersampling resolve: box-average each factor×factor block of `src` into one pixel of
+ * `dst`. Both buffers are linear light, so a plain mean IS the physically-right filter —
+ * averaging after gamma would darken edges (that's why this runs before present()).
+ */
+export function downsampleInto(
+  src: LinearFramebuffer,
+  dst: LinearFramebuffer,
+  factor: number,
+): void {
+  if (src.width !== dst.width * factor || src.height !== dst.height * factor) {
+    throw new Error(
+      `downsampleInto: src ${src.width}x${src.height} is not ${factor}x dst ${dst.width}x${dst.height}`,
+    );
+  }
+  const inv = 1 / (factor * factor);
+  const s = src.data;
+  const d = dst.data;
+  for (let y = 0; y < dst.height; y++) {
+    for (let x = 0; x < dst.width; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let sy = y * factor; sy < (y + 1) * factor; sy++) {
+        let i = (sy * src.width + x * factor) * 3;
+        for (let sx = 0; sx < factor; sx++, i += 3) {
+          r += s[i];
+          g += s[i + 1];
+          b += s[i + 2];
+        }
+      }
+      const j = (y * dst.width + x) * 3;
+      d[j] = r * inv;
+      d[j + 1] = g * inv;
+      d[j + 2] = b * inv;
+    }
+  }
+}
+
+/**
  * CPU framebuffer: 3 floats per pixel, kept in LINEAR space so lighting math adds/scales
  * correctly. Converted to bytes exactly once, in present().
  */

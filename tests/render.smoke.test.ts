@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { defaultSettings, type RenderMode } from "../src/debug";
-import { LinearFramebuffer, linearToByte } from "../src/framebuffer";
+import { downsampleInto, LinearFramebuffer, linearToByte } from "../src/framebuffer";
 import { Cell, level1 } from "../src/map";
 import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "../src/material";
 import { Player } from "../src/player";
@@ -89,6 +89,31 @@ describe("full-pipeline smoke render", () => {
     const normalStats = frameStats();
     expect(albedoStats.nonBlack).toBeGreaterThan(0.99); // albedo ignores the torch entirely
     expect(normalStats.nonBlack).toBeGreaterThan(0.99); // encoded normals are never black
+  });
+
+  it("2× supersampled resolve matches the 1× frame in brightness but differs at edges", () => {
+    renderFrame("full", 1.5, 1.5, 0.4);
+    const base = Float32Array.from(fb.data);
+    const baseMean = frameStats().mean;
+
+    // Same frame through the SSAA path: render 2× hi-res, box-resolve into fb.
+    const fbHi = new LinearFramebuffer(W * 2, H * 2);
+    const hiCaster = new Raycaster(fbHi, map);
+    const settings = defaultSettings();
+    hiCaster.render(new Player(1.5, 1.5, 0.4), materials, settings);
+    downsampleInto(fbHi, fb, 2);
+    dumpPPM("spawn-ssaa");
+
+    const s = frameStats();
+    // Averaging shouldn't change what the frame IS — same scene, same overall exposure.
+    expect(Math.abs(s.mean - baseMean)).toBeLessThan(0.02);
+    expect(s.nonBlack).toBeGreaterThan(0.5);
+    // ...but it must actually change pixels (edge smoothing), else the toggle is a no-op.
+    let changed = 0;
+    for (let i = 0; i < base.length; i += 3) {
+      if (Math.abs(fb.data[i] - base[i]) > 0.01) changed++;
+    }
+    expect(changed / (base.length / 3)).toBeGreaterThan(0.05);
   });
 
   it("depth buffer holds sane perpendicular distances after a frame", () => {

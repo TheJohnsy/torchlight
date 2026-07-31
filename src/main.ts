@@ -1,5 +1,5 @@
 import { createDebugPanel, defaultSettings } from "./debug";
-import { LinearFramebuffer } from "./framebuffer";
+import { downsampleInto, LinearFramebuffer } from "./framebuffer";
 import { Cell, level1 } from "./map";
 import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "./material";
 import { Player } from "./player";
@@ -12,10 +12,16 @@ const H = 200;
 
 const canvas = document.getElementById("view") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
+// SSAA renders into a 2× buffer through its own raycaster (each caster's depth array is
+// sized to its framebuffer), then box-resolves into `fb` before present.
+const SSAA = 2;
+
 const fb = new LinearFramebuffer(W, H);
+const fbHi = new LinearFramebuffer(W * SSAA, H * SSAA);
 const map = level1();
 const player = new Player(1.5, 1.5, 0);
 const raycaster = new Raycaster(fb, map);
+const raycasterHi = new Raycaster(fbHi, map);
 
 // Bake every procedural material once at startup (~a second of FBm; then the loop is free).
 const materials: MaterialSet = {
@@ -59,7 +65,12 @@ function frame(now: number): void {
   player.turn(turn * TURN_SPEED * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
-  raycaster.render(player, materials, settings);
+  if (settings.ssaa) {
+    raycasterHi.render(player, materials, settings);
+    downsampleInto(fbHi, fb, SSAA);
+  } else {
+    raycaster.render(player, materials, settings);
+  }
   fb.present(ctx);
 
   fpsFrames++;

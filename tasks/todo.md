@@ -12,7 +12,7 @@
 - [x] Verify: unit tests green (47), typecheck clean, headless smoke frames inspected
 
 ## Remaining stretch candidates (spec §2 priority order)
-- [ ] Supersampling anti-aliasing
+- [x] Supersampling anti-aliasing (2× render → linear box resolve, debug toggle)
 - [ ] Bloom on the torch (threshold → Gaussian blur → composite)
 - [ ] One billboard sprite with depth-buffer occlusion
 - [ ] Key + door win condition
