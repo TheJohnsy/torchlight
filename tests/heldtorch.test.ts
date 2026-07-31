@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { LinearFramebuffer } from "../src/framebuffer";
-import { renderHeldTorch } from "../src/heldtorch";
+import { renderHeldTorch, torchFlicker } from "../src/heldtorch";
 
 const W = 320;
 const H = 200;
+
+describe("torchFlicker (shared by the flame sprite and the actual light)", () => {
+  it("stays within gentle bounds so the room never strobes or blacks out", () => {
+    for (let t = 0; t < 12; t += 0.05) {
+      const f = torchFlicker(t);
+      expect(f).toBeGreaterThan(0.65);
+      expect(f).toBeLessThan(1.25);
+    }
+  });
+
+  it("is deterministic and actually varies over time", () => {
+    expect(torchFlicker(1.5)).toBe(torchFlicker(1.5));
+    let varies = false;
+    for (let t = 0; t < 3 && !varies; t += 0.1) {
+      if (Math.abs(torchFlicker(t) - torchFlicker(0)) > 0.02) varies = true;
+    }
+    expect(varies).toBe(true);
+  });
+});
 
 describe("renderHeldTorch (first-person viewmodel)", () => {
   it("draws only in the lower-right of the frame", () => {

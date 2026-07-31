@@ -21,6 +21,16 @@
   <div id="stage">
     <div style="position: relative;">
       <canvas id="view" width="320" height="200"></canvas>
+      <!-- In-game HUD, classic corner-overlay style: translucent plate so the scene
+           reads through it; icons are painted at runtime from the sprite texel code. -->
+      <div id="hud" style="position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 16px; padding: 7px 12px; background: rgba(10, 8, 4, 0.5); border: 1px solid rgba(232, 181, 106, 0.3); border-radius: 4px; color: #e8b56a; font-size: 17px; user-select: none; pointer-events: none;">
+        <span style="display: flex; align-items: center; gap: 7px;">
+          <canvas id="hud-gem" width="16" height="22" style="image-rendering: pixelated;"></canvas>
+          <span id="hud-gems">0/0</span>
+        </span>
+        <canvas id="hud-key" width="24" height="24" style="image-rendering: pixelated;"></canvas>
+        <span id="hud-seed" style="font-size: 11px; color: rgba(207, 201, 189, 0.55);"></span>
+      </div>
       <div id="win-overlay" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; background: rgba(8, 6, 2, 0.75); color: #e8b56a; font-size: 28px; letter-spacing: 0.15em; text-align: center;">
         YOU ESCAPED
         <span style="font-size: 13px; color: #cfc9bd;">the vault key served you well</span>

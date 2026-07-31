@@ -8,7 +8,8 @@ import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMater
 import { Player } from "./player";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
-import { renderHeldTorch } from "./heldtorch";
+import { linearToByte } from "./framebuffer";
+import { renderHeldTorch, torchFlicker } from "./heldtorch";
 import { gemTexel, keyTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
@@ -47,27 +48,61 @@ const materials: MaterialSet = {
 };
 
 // --- input -------------------------------------------------------------------------------
+// KeyboardEvent.code = PHYSICAL key, immune to keyboard layout (e.key turns into Hebrew/
+// Cyrillic/etc. characters on non-Latin layouts, which silently killed WASD).
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
-  keys.add(e.key.toLowerCase());
-  if (e.key.startsWith("Arrow")) e.preventDefault(); // don't scroll the page
+  keys.add(e.code);
+  if (e.code.startsWith("Arrow")) e.preventDefault(); // don't scroll the page
 });
-addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
-const down = (...ks: string[]) => ks.some((k) => keys.has(k));
+addEventListener("keyup", (e) => keys.delete(e.code));
+const down = (...codes: string[]) => codes.some((c) => keys.has(c));
 
 const settings = defaultSettings();
 const panelRoot = document.getElementById("debug-panel")!;
 const fpsEl = createDebugPanel(panelRoot, settings);
 const game = new GameState(placements);
 const winOverlay = document.getElementById("win-overlay")!;
-// Run readout: which dungeon this is and how much of it you've looted.
-const runEl = document.createElement("div");
-panelRoot.append(runEl);
-const updateRunReadout = (): void => {
-  const kv = game.hasKey ? "🔑" : "—";
-  runEl.textContent = `seed ${seed} · gems ${game.collected}/${game.treasures.length} · key ${kv}`;
+
+// --- HUD: icons painted from the SAME texel functions that draw the world sprites -------
+/** Rasterize a sprite texel into a tiny HUD canvas; `dim` = not-yet-collected ghost. */
+function paintIcon(cv: HTMLCanvasElement, texel: typeof keyTexel, dim: boolean): void {
+  const ictx = cv.getContext("2d")!;
+  const img = ictx.createImageData(cv.width, cv.height);
+  const c = { r: 0, g: 0, b: 0 };
+  for (let y = 0; y < cv.height; y++) {
+    for (let x = 0; x < cv.width; x++) {
+      const a = texel((x + 0.5) / cv.width, 1 - (y + 0.5) / cv.height, c);
+      const i = (y * cv.width + x) * 4;
+      if (a < 0.5) continue; // transparent — the scene shows through the HUD plate
+      if (dim) {
+        // Ghost slot: flat grey silhouette says "this exists, you don't have it yet".
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = 150;
+        img.data[i + 3] = 90;
+      } else {
+        img.data[i] = linearToByte(c.r);
+        img.data[i + 1] = linearToByte(c.g);
+        img.data[i + 2] = linearToByte(c.b);
+        img.data[i + 3] = 255;
+      }
+    }
+  }
+  ictx.putImageData(img, 0, 0);
+}
+const hudGems = document.getElementById("hud-gems")!;
+const hudKeyCv = document.getElementById("hud-key") as HTMLCanvasElement;
+document.getElementById("hud-seed")!.textContent = `seed ${seed}`;
+paintIcon(document.getElementById("hud-gem") as HTMLCanvasElement, gemTexel, false);
+paintIcon(hudKeyCv, keyTexel, true);
+let hudHadKey = false;
+const updateHud = (): void => {
+  hudGems.textContent = `${game.collected}/${game.treasures.length}`;
+  if (game.hasKey && !hudHadKey) {
+    hudHadKey = true;
+    paintIcon(hudKeyCv, keyTexel, false); // the ghost lights up gold on pickup
+  }
 };
-updateRunReadout();
+updateHud();
 
 /** Key + surviving gems, painter-sorted far→near so overlapping billboards layer right. */
 function drawSprites(buf: LinearFramebuffer, caster: Raycaster): void {
@@ -106,30 +141,37 @@ function frame(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
 
-  const run = down("shift") ? 1.8 : 1;
-  const forward = (down("w", "arrowup") ? 1 : 0) - (down("s", "arrowdown") ? 1 : 0);
-  const strafe = (down("d") ? 1 : 0) - (down("a") ? 1 : 0);
-  const turn = (down("arrowright", "e") ? 1 : 0) - (down("arrowleft", "q") ? 1 : 0);
+  const run = down("ShiftLeft", "ShiftRight") ? 1.8 : 1;
+  const forward = (down("KeyW", "ArrowUp") ? 1 : 0) - (down("KeyS", "ArrowDown") ? 1 : 0);
+  const strafe = (down("KeyD") ? 1 : 0) - (down("KeyA") ? 1 : 0);
+  const turn = (down("ArrowRight", "KeyE") ? 1 : 0) - (down("ArrowLeft", "KeyQ") ? 1 : 0);
 
   player.turn(turn * settings.turnSpeed * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
   game.update(player, map);
   if (game.won) winOverlay.style.display = "flex";
-  updateRunReadout();
+  updateHud();
+
+  // The flame's breathing modulates the real point light: mutate the torch intensity for
+  // this render, restore after, so the slider keeps owning the base value.
+  const tSec = now / 1000;
+  const baseIntensity = settings.torch.intensity;
+  settings.torch.intensity = baseIntensity * torchFlicker(tSec);
 
   // Sprites draw into whichever buffer the walls just rendered to, using ITS depth buffer,
   // so SSAA smooths their edges like everything else.
   if (settings.ssaa) {
     raycasterHi.render(player, materials, settings);
     drawSprites(fbHi, raycasterHi);
-    renderHeldTorch(fbHi, now / 1000);
+    renderHeldTorch(fbHi, tSec);
     downsampleInto(fbHi, fb, SSAA);
   } else {
     raycaster.render(player, materials, settings);
     drawSprites(fb, raycaster);
-    renderHeldTorch(fb, now / 1000);
+    renderHeldTorch(fb, tSec);
   }
+  settings.torch.intensity = baseIntensity;
   if (settings.bloom) {
     applyBloom(fb, bloomA, bloomB, {
       threshold: settings.bloomThreshold,
