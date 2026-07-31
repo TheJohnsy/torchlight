@@ -61,8 +61,8 @@ deterministic and repeatable, same principle as the seeded noise fields.
 - [ ] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides)
 - [ ] Trivial wander-toward-player behavior; touching it just knocks the player back
 
-### Phase E1.5 — combat loop (the gameplay glue around the mob)
-Gameplay stays thin, but each piece still points at a technique on screen:
+### Phase E1.5 — combat loop (makes it a real game, not a walkthrough)
+Combat should feel like a game; each piece still points at a technique on screen:
 - [ ] Attack input (Space / left click): torch swing — the viewmodel plays a keyframed
       arc (animation lecture), hits what's in reach ahead (uses the depth/projection math)
 - [ ] Mob HP + hit feedback: white hit-flash frame + emissive pulse on damage

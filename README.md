@@ -36,7 +36,7 @@ stream drives the actual point light — intensity flickers and the light positi
 the shading dances on the walls. A translucent HUD shows gems collected and the key slot,
 with icons rasterized from the same texel code that draws the world sprites.
 
-## The game (deliberately tiny)
+## The game
 
 Every playthrough generates a **fresh procedural dungeon** — seeded rooms, corridors, and a
 locked vault, flood-fill validated so the run is always completable (`?seed=N` in the URL
@@ -63,8 +63,13 @@ know why everything is the way it is.
 
 ### The goals
 
-1. **A graphics course project, not a game project.** The deliverable is demonstrable
-   rendering techniques; gameplay is deliberately trivial (two booleans and a counter).
+1. **A graphics course project AND a real game — both, on purpose.** Not a production
+   title, but a genuinely playable dungeon crawl: explore a generated dungeon, loot it,
+   find the key, beat the vault (combat is next on the roadmap). The rule that keeps the
+   two goals from fighting: every game feature must *also* demonstrate a course
+   technique — the game is the vehicle, the techniques are the cargo, and both have to
+   work. A grader should enjoy playing it, then be able to point at any element on
+   screen and hear which lecture it came from.
 2. **Everything is computed.** Hard rules we never broke: no image assets, no rendering
    libraries, no GPU/shaders, no runtime dependencies. Every pixel — stone, fire, the HUD
    icons — comes from code at runtime.

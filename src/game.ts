@@ -2,10 +2,10 @@ import { GridMap } from "./map";
 import { Player } from "./player";
 
 /**
- * The (deliberately trivial — spec hard rule) gameplay: find the glowing key, it opens the
- * vault door, stand in the vault to win; gems along the way just count up. State is two
- * booleans and a counter — placements come either from the authored level's constants
- * below or from the procedural generator.
+ * The current gameplay loop: find the glowing key, it opens the vault door, stand in the
+ * vault to win; gems along the way count up. State is still just two booleans and a
+ * counter — combat (mob/player HP, attacks) arrives with roadmap phases E1/E1.5.
+ * Placements come from the authored level's constants below or the procedural generator.
  */
 
 /** Authored-level defaults: key in the small chamber west of center, vault bottom-right. */
