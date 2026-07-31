@@ -46,6 +46,16 @@ deterministic and repeatable, same principle as the seeded noise fields.
 - [x] Same `GridMap` contract — renderer untouched; authored level stays for tests
 - [x] URL `?seed=` for reproducible dungeons in the demo
 
+### Player-feel additions (user-requested, beyond the slide roadmap)
+- [x] Held-torch viewmodel: procedural wood/leather/iron handle + turbulent flame
+      (heat-field with scrolling FBm, real-flame width profile, ember-lit collar seam)
+- [x] Flame drives the real light: `torchFlicker` scales intensity AND `torchSway`
+      wanders the light position — highlights crawl over the normal-mapped stone
+- [x] In-game HUD: translucent corner plate, icons rasterized from the sprite texels,
+      key slot ghosts until pickup; seed readout for reproducing runs
+- [x] Turn-speed slider (0.6–6 rad/s) in a controls fieldset
+- [x] Input by physical key (`e.code`) — WASD survives non-Latin keyboard layouts
+
 ### Phase E1 — one mob (richest single feature: unlocks 3 slides)
 - [ ] Procedurally-drawn slime/bat sprite (Worley/FBm blobs — no assets, ever)
 - [ ] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides)

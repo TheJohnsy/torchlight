@@ -26,9 +26,15 @@ npm run build    # typecheck + production bundle
 
 ## Controls
 
-WASD move · ←/→ or Q/E turn · Shift run. The debug panel has per-stage render toggles
-(albedo / normals / lighting / full), a torch-intensity slider, and stretch-feature
-toggles: bilinear filtering, 2× supersampling, distance fog, torch bloom.
+WASD move · ←/→ or Q/E turn · Shift run (physical-key input, so any keyboard layout
+works). The debug panel has per-stage render toggles (albedo / normals / lighting / full),
+torch-intensity and turn-speed sliders, and stretch-feature toggles: bilinear filtering,
+2× supersampling, distance fog, torch bloom.
+
+You carry a **procedural torch**: its flame is a turbulent noise field, and the same noise
+stream drives the actual point light — intensity flickers and the light position sways, so
+the shading dances on the walls. A translucent HUD shows gems collected and the key slot,
+with icons rasterized from the same texel code that draws the world sprites.
 
 ## The game (deliberately tiny)
 
