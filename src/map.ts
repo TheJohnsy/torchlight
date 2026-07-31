@@ -3,12 +3,15 @@ export enum Cell {
   Floor = 0,
   Stone = 1,
   Brick = 2,
+  /** Solid until the key is picked up; openDoors() turns it into Floor. */
+  Door = 3,
 }
 
 const CHAR_TO_CELL: Record<string, Cell> = {
   ".": Cell.Floor,
   "#": Cell.Stone,
   "B": Cell.Brick,
+  "D": Cell.Door,
 };
 
 export class GridMap {
@@ -46,12 +49,20 @@ export class GridMap {
   isWall(x: number, y: number): boolean {
     return this.cellAt(Math.floor(x), Math.floor(y)) !== Cell.Floor;
   }
+
+  /** The key was picked up: every door swings open (becomes walkable floor). */
+  openDoors(): void {
+    for (let i = 0; i < this.cells.length; i++) {
+      if (this.cells[i] === Cell.Door) this.cells[i] = Cell.Floor;
+    }
+  }
 }
 
 /**
- * The one hand-authored level (spec §2). 24x16. '#' stone, 'B' brick, '.' floor.
- * Three room bands connected by door gaps; brick pillars give the torch something to rake
- * light across.
+ * The one hand-authored level (spec §2). 24x16. '#' stone, 'B' brick, '.' floor, 'D' the
+ * locked vault door. Three room bands connected by door gaps; brick pillars give the torch
+ * something to rake light across. The bottom-right room is the vault: reachable only
+ * through the door at (18,11), which the glowing key opens.
  */
 export const LEVEL_1 = [
   "########################",
@@ -65,7 +76,7 @@ export const LEVEL_1 = [
   "#...#......#...#.......#",
   "#...#......#...........#",
   "#......................#",
-  "####.########.####..####",
+  "####.########.####D#####",
   "#..........#.....#.....#",
   "#.BBBBBB...#..B..#..B..#",
   "#..........#.....#.....#",

@@ -104,6 +104,57 @@ export class CeilingMaterial implements Material {
 }
 
 /**
+ * The vault door: vertical oak planks with dark seam grooves. Grain is FBm squeezed hard
+ * in u and stretched in v so the streaks run up the planks; each plank gets a hashed tint
+ * offset so the door reads as boards, not wallpaper. Same height→normal machinery as
+ * everything else, so the torch rakes across the plank bevels.
+ */
+export class DoorMaterial implements Material {
+  private readonly planks = 4;
+  private readonly bump = 0.3;
+
+  /** Plank-local u and plank index. */
+  private local(u: number): { plank: number; lu: number } {
+    const uu = u * this.planks;
+    const plank = Math.floor(uu);
+    return { plank, lu: uu - plank };
+  }
+
+  readonly height = (u: number, v: number): number => {
+    const { plank, lu } = this.local(u);
+    // 1 on the plank face, 0 in the seam groove, beveled in between.
+    const face = smoothstep(0.03, 0.14, Math.min(lu, 1 - lu));
+    // Grain: high frequency across, low along, offset per plank (period keeps u-tiling).
+    const off = hash2(plank, 17) * 32;
+    const grain = fbm2(u * 12 + off, v * 2 + off, 4, { period: 12 });
+    return mix(0.2, 0.55 + 0.45 * grain, face);
+  };
+
+  albedo(u: number, v: number): Color {
+    const { plank, lu } = this.local(u);
+    const face = smoothstep(0.03, 0.14, Math.min(lu, 1 - lu));
+    const off = hash2(plank, 17) * 32;
+    const grain = fbm2(u * 12 + off, v * 2 + off, 4, { period: 12 });
+    const tint = mix(0.85, 1.1, hash2(plank * 5 + 3, 29));
+    // Oak ramp: dark streaks where the grain dips, warm mid-brown elsewhere.
+    const w = mix(0.4, 1, grain) * tint;
+    const r = 0.42 * w;
+    const g = 0.26 * w;
+    const b = 0.13 * w;
+    // Seams fall to near-black gap color.
+    return {
+      r: clamp01(mix(0.04, r, face)),
+      g: clamp01(mix(0.03, g, face)),
+      b: clamp01(mix(0.025, b, face)),
+    };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
+
+/**
  * Running-bond brickwork. The brick/mortar step function IS the height field, so the
  * bevelled edges fall out of the same gradient→normal machinery as the stone grain —
  * that's what makes the torch catch on every brick edge.

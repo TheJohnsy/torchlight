@@ -7,7 +7,7 @@ import { BakedSampler } from "./sampler";
 import type { Color, Normal } from "./types";
 
 /** Half-width of the camera plane = tan(FOV/2); 0.66 ≈ 66° horizontal FOV. */
-const PLANE_HALF = 0.66;
+export const PLANE_HALF = 0.66;
 
 /** Which sampler covers which surface. */
 export interface MaterialSet {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BrickMaterial,
   CeilingMaterial,
+  DoorMaterial,
   FloorMaterial,
   heightToNormal,
   StoneMaterial,
@@ -13,6 +14,7 @@ const MATERIALS: [string, Material][] = [
   ["brick", new BrickMaterial()],
   ["floor", new FloorMaterial()],
   ["ceiling", new CeilingMaterial()],
+  ["door", new DoorMaterial()],
 ];
 
 describe.each(MATERIALS)("%s material", (_name, mat) => {
@@ -59,6 +61,23 @@ describe("heightToNormal", () => {
     const weak = heightToNormal((u) => u, 0.5, 0.5, 0.1);
     const strong = heightToNormal((u) => u, 0.5, 0.5, 2);
     expect(Math.abs(strong.x)).toBeGreaterThan(Math.abs(weak.x));
+  });
+});
+
+describe("door material", () => {
+  const door = new DoorMaterial();
+
+  it("has groove gaps between planks (height dips at plank seams)", () => {
+    // 4 planks across → seams at u = 0.25, 0.5, 0.75; face centers halfway between.
+    const seam = door.height(0.5, 0.4);
+    const face = door.height(0.375, 0.4);
+    expect(seam).toBeLessThan(face);
+  });
+
+  it("looks like wood: warm brown with red over green over blue", () => {
+    const { r, g, b } = door.albedo(0.375, 0.4); // plank face, away from seams
+    expect(r).toBeGreaterThan(g);
+    expect(g).toBeGreaterThan(b);
   });
 });
 

@@ -13,6 +13,8 @@
 
 ## Remaining stretch candidates (spec §2 priority order)
 - [x] Supersampling anti-aliasing (2× render → linear box resolve, debug toggle)
-- [ ] Bloom on the torch (threshold → Gaussian blur → composite)
-- [ ] One billboard sprite with depth-buffer occlusion
-- [ ] Key + door win condition
+- [x] Bloom on the torch (linear bright-pass → separable Gaussian → additive composite)
+- [x] One billboard sprite with depth-buffer occlusion (the glowing key, procedural SDF)
+- [x] Key + door win condition (key opens the plank-wood vault door; vault = win)
+
+All spec §2 stretch goals complete. 77 tests, typecheck clean, build green.

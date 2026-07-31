@@ -1,11 +1,13 @@
 import { applyBloom } from "./bloom";
 import { createDebugPanel, defaultSettings } from "./debug";
 import { downsampleInto, LinearFramebuffer } from "./framebuffer";
+import { GameState, KEY_POS } from "./game";
 import { Cell, level1 } from "./map";
-import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "./material";
+import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMaterial } from "./material";
 import { Player } from "./player";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
+import { keyTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
 const W = 320;
@@ -32,6 +34,7 @@ const materials: MaterialSet = {
   walls: new Map([
     [Cell.Stone, new BakedSampler(new StoneMaterial())],
     [Cell.Brick, new BakedSampler(new BrickMaterial())],
+    [Cell.Door, new BakedSampler(new DoorMaterial())],
   ]),
   floor: new BakedSampler(new FloorMaterial()),
   ceiling: new BakedSampler(new CeilingMaterial()),
@@ -48,6 +51,8 @@ const down = (...ks: string[]) => ks.some((k) => keys.has(k));
 
 const settings = defaultSettings();
 const fpsEl = createDebugPanel(document.getElementById("debug-panel")!, settings);
+const game = new GameState();
+const winOverlay = document.getElementById("win-overlay")!;
 let fpsFrames = 0;
 let fpsTime = 0;
 
@@ -69,11 +74,18 @@ function frame(now: number): void {
   player.turn(turn * TURN_SPEED * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
+  game.update(player, map);
+  if (game.won) winOverlay.style.display = "flex";
+
+  // Sprite draws into whichever buffer the walls just rendered to, using ITS depth buffer,
+  // so SSAA smooths the key's edges like everything else.
   if (settings.ssaa) {
     raycasterHi.render(player, materials, settings);
+    if (!game.hasKey) renderSprite(fbHi, raycasterHi.depth, player, KEY_POS.x, KEY_POS.y, keyTexel);
     downsampleInto(fbHi, fb, SSAA);
   } else {
     raycaster.render(player, materials, settings);
+    if (!game.hasKey) renderSprite(fb, raycaster.depth, player, KEY_POS.x, KEY_POS.y, keyTexel);
   }
   if (settings.bloom) {
     applyBloom(fb, bloomA, bloomB, {

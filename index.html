@@ -19,7 +19,13 @@
 <body>
   <h1>TORCHLIGHT</h1>
   <div id="stage">
-    <canvas id="view" width="320" height="200"></canvas>
+    <div style="position: relative;">
+      <canvas id="view" width="320" height="200"></canvas>
+      <div id="win-overlay" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; background: rgba(8, 6, 2, 0.75); color: #e8b56a; font-size: 28px; letter-spacing: 0.15em; text-align: center;">
+        YOU ESCAPED
+        <span style="font-size: 13px; color: #cfc9bd;">the vault key served you well</span>
+      </div>
+    </div>
     <div id="debug-panel"></div>
   </div>
   <p class="help">WASD move &middot; &larr;/&rarr; or Q/E turn &middot; Shift run &middot; <a href="/harness.html">material harness</a></p>

@@ -11,10 +11,28 @@ describe("GridMap.parse", () => {
   });
 
   it("maps chars to cells", () => {
-    const m = GridMap.parse(["#B."]);
+    const m = GridMap.parse(["#B.D"]);
     expect(m.cellAt(0, 0)).toBe(Cell.Stone);
     expect(m.cellAt(1, 0)).toBe(Cell.Brick);
     expect(m.cellAt(2, 0)).toBe(Cell.Floor);
+    expect(m.cellAt(3, 0)).toBe(Cell.Door);
+  });
+});
+
+describe("doors", () => {
+  it("are solid until opened, floor afterwards", () => {
+    const m = GridMap.parse(["#D#"]);
+    expect(m.isWall(1.5, 0.5)).toBe(true);
+    m.openDoors();
+    expect(m.cellAt(1, 0)).toBe(Cell.Floor);
+    expect(m.isWall(1.5, 0.5)).toBe(false);
+  });
+
+  it("openDoors leaves walls alone", () => {
+    const m = GridMap.parse(["#D#"]);
+    m.openDoors();
+    expect(m.cellAt(0, 0)).toBe(Cell.Stone);
+    expect(m.cellAt(2, 0)).toBe(Cell.Stone);
   });
 });
 
@@ -45,5 +63,16 @@ describe("level 1", () => {
 
   it("has an open spawn cell at (1.5, 1.5)", () => {
     expect(map.isWall(1.5, 1.5)).toBe(false);
+  });
+
+  it("has exactly one door, guarding the vault room", () => {
+    let doors = 0;
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        if (map.cellAt(x, y) === Cell.Door) doors++;
+      }
+    }
+    expect(doors).toBe(1);
+    expect(map.cellAt(18, 11)).toBe(Cell.Door);
   });
 });

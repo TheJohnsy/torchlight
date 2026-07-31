@@ -116,6 +116,24 @@ describe("full-pipeline smoke render", () => {
     expect(changed / (base.length / 3)).toBeGreaterThan(0.05);
   });
 
+  it("renders the glowing key sprite into the real scene with real wall depth", async () => {
+    const { keyTexel, renderSprite } = await import("../src/sprite");
+    const { KEY_POS } = await import("../src/game");
+    // Stand two tiles east of the key, facing it (west = angle π).
+    const player = new Player(KEY_POS.x + 2, KEY_POS.y, Math.PI);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    renderSprite(fb, raycaster.depth, player, KEY_POS.x, KEY_POS.y, keyTexel);
+    dumpPPM("key-sprite");
+
+    // The key is emissive gold (>1 linear red) — nothing else in the dungeon gets there.
+    let golden = 0;
+    for (let i = 0; i < fb.data.length; i += 3) {
+      if (fb.data[i] > 1 && fb.data[i] > fb.data[i + 1] && fb.data[i + 1] > fb.data[i + 2]) golden++;
+    }
+    expect(golden).toBeGreaterThan(20);
+  });
+
   it("depth buffer holds sane perpendicular distances after a frame", () => {
     renderFrame("full", 1.5, 1.5, 0);
     for (let x = 0; x < W; x++) {

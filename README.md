@@ -27,7 +27,14 @@ npm run build    # typecheck + production bundle
 ## Controls
 
 WASD move · ←/→ or Q/E turn · Shift run. The debug panel has per-stage render toggles
-(albedo / normals / lighting / full) and a torch-intensity slider.
+(albedo / normals / lighting / full), a torch-intensity slider, and stretch-feature
+toggles: bilinear filtering, 2× supersampling, distance fog, torch bloom.
+
+## The game (deliberately tiny)
+
+Somewhere in the dungeon floats a **glowing key** — a procedural billboard sprite, occluded
+per column by the wall depth buffer. Walk over it and the wooden **vault door** in the
+south-east swings open; step inside the vault to win.
 
 ## How it works, briefly
 
