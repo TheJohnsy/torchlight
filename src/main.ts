@@ -1,4 +1,4 @@
-import { defaultSettings } from "./debug";
+import { createDebugPanel, defaultSettings } from "./debug";
 import { LinearFramebuffer } from "./framebuffer";
 import { Cell, level1 } from "./map";
 import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "./material";
@@ -37,6 +37,9 @@ addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 const down = (...ks: string[]) => ks.some((k) => keys.has(k));
 
 const settings = defaultSettings();
+const fpsEl = createDebugPanel(document.getElementById("debug-panel")!, settings);
+let fpsFrames = 0;
+let fpsTime = 0;
 
 const MOVE_SPEED = 2.6; // units/sec
 const TURN_SPEED = 2.4; // rad/sec
@@ -58,6 +61,14 @@ function frame(now: number): void {
 
   raycaster.render(player, materials, settings);
   fb.present(ctx);
+
+  fpsFrames++;
+  fpsTime += dt;
+  if (fpsTime >= 0.5) {
+    fpsEl.textContent = `${Math.round(fpsFrames / fpsTime)} fps`;
+    fpsFrames = 0;
+    fpsTime = 0;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
