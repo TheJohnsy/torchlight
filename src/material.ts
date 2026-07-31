@@ -61,3 +61,77 @@ export class StoneMaterial implements Material {
     return heightToNormal(this.height, u, v, this.bump);
   }
 }
+
+/**
+ * Running-bond brickwork. The brick/mortar step function IS the height field, so the
+ * bevelled edges fall out of the same gradient→normal machinery as the stone grain —
+ * that's what makes the torch catch on every brick edge.
+ */
+export class BrickMaterial implements Material {
+  private readonly rows = 4;
+  private readonly cols = 2;
+  private readonly mortarWidth = 0.07; // in brick-local coords
+  private readonly bevelWidth = 0.12;
+  private readonly bump = 0.33;
+
+  /** Brick-local coords + brick id; odd rows shift half a brick (running bond). */
+  private local(u: number, v: number): { row: number; col: number; lu: number; lv: number } {
+    const vv = v * this.rows;
+    const row = Math.floor(vv);
+    const uu = u * this.cols + (row & 1 ? 0.5 : 0);
+    const col = Math.floor(uu);
+    return { row, col, lu: uu - col, lv: vv - row };
+  }
+
+  /** Stable brick identity: wrap col so the brick spanning the u=0/1 seam is ONE brick. */
+  private brickId(col: number, row: number): number {
+    return ((col % this.cols) + this.cols) % this.cols + row * 16;
+  }
+
+  /** 1 on the brick face, 0 deep in the mortar groove, smooth bevel between. */
+  private faceMask(lu: number, lv: number): number {
+    const m = this.mortarWidth;
+    const b = this.bevelWidth;
+    const du = Math.min(lu, 1 - lu);
+    const dv = Math.min(lv, 1 - lv);
+    return smoothstep(m, m + b, du) * smoothstep(m, m + b, dv);
+  }
+
+  readonly height = (u: number, v: number): number => {
+    const { row, col, lu, lv } = this.local(u, v);
+    const face = this.faceMask(lu, lv);
+    // Per-brick offset decorrelates the grain; period 8 keeps it tiling across the seam.
+    const off = hash2(this.brickId(col, row), row) * 64;
+    const grain = fbm2(u * 8 + off, v * 8 + off, 4, { period: 8 });
+    const mortarH = 0.15 + 0.1 * grain;
+    const brickH = 0.7 + 0.3 * grain;
+    return mix(mortarH, brickH, face);
+  };
+
+  albedo(u: number, v: number): Color {
+    const { row, col, lu, lv } = this.local(u, v);
+    const face = this.faceMask(lu, lv);
+    const id = this.brickId(col, row);
+    const tint = hash2(id * 7 + 1, row * 3 + 5);
+    const off = hash2(id, row) * 64;
+    const grain = fbm2(u * 8 + off, v * 8 + off, 4, { period: 8 });
+    const rough = mix(0.85, 1.1, grain);
+    // Fired clay, tinted per brick so the wall doesn't look stamped.
+    const br = mix(0.36, 0.58, tint) * rough;
+    const bg = mix(0.14, 0.24, tint) * rough;
+    const bb = mix(0.1, 0.16, tint) * rough;
+    // Sandy mortar.
+    const mr = mix(0.3, 0.42, grain);
+    const mg = mix(0.28, 0.4, grain);
+    const mb = mix(0.25, 0.36, grain);
+    return {
+      r: clamp01(mix(mr, br, face)),
+      g: clamp01(mix(mg, bg, face)),
+      b: clamp01(mix(mb, bb, face)),
+    };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
