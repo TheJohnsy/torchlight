@@ -49,9 +49,20 @@ function shadeFragment(
       return;
     case "lighting":
       shadeTorch(shaded, 1, 1, 1, wnx, wny, wnz, fx, fy, fz, ex, ey, ez, s.torch);
-      return;
+      break;
     default:
       shadeTorch(shaded, aR, aG, aB, wnx, wny, wnz, fx, fy, fz, ex, ey, ez, s.torch);
+  }
+  if (s.fog) {
+    // Beer–Lambert extinction toward black — dungeon murk, not sky haze. Skipped in the
+    // albedo/normals debug views so those stay diagnostic.
+    const dx = ex - fx;
+    const dy = ey - fy;
+    const dz = ez - fz;
+    const f = Math.exp(-Math.sqrt(dx * dx + dy * dy + dz * dz) * s.fogDensity);
+    shaded.r *= f;
+    shaded.g *= f;
+    shaded.b *= f;
   }
 }
 
