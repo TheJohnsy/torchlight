@@ -49,3 +49,35 @@ export function valueNoise2(x: number, y: number, period = 0): number {
     v,
   );
 }
+
+/** Dot of a hash-derived unit gradient at lattice corner (ix,iy) with offset (dx,dy). */
+function gradDot(ix: number, iy: number, dx: number, dy: number): number {
+  const angle = hash2(ix, iy) * Math.PI * 2;
+  return Math.cos(angle) * dx + Math.sin(angle) * dy;
+}
+
+/**
+ * Perlin (gradient) noise: instead of random *values* at lattice points, random *slopes*.
+ * The surface passes through 0 at every lattice point, which kills value noise's blobby
+ * grid pattern. Scaled by sqrt(2) so the practical range is ≈[-1,1]. `period` (integer)
+ * makes it tile.
+ */
+export function perlin2(x: number, y: number, period = 0): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  // Lattice ids may wrap for tiling, but the geometric offsets must not.
+  const x0 = wrapIndex(ix, period);
+  const x1 = wrapIndex(ix + 1, period);
+  const y0 = wrapIndex(iy, period);
+  const y1 = wrapIndex(iy + 1, period);
+  const u = fade(fx);
+  const v = fade(fy);
+  const n = lerp(
+    lerp(gradDot(x0, y0, fx, fy), gradDot(x1, y0, fx - 1, fy), u),
+    lerp(gradDot(x0, y1, fx, fy - 1), gradDot(x1, y1, fx - 1, fy - 1), u),
+    v,
+  );
+  return n * Math.SQRT2;
+}
