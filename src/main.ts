@@ -9,7 +9,7 @@ import { Player } from "./player";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
 import { linearToByte } from "./framebuffer";
-import { renderHeldTorch, torchFlicker } from "./heldtorch";
+import { renderHeldTorch, torchFlicker, torchSway } from "./heldtorch";
 import { gemTexel, keyTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
@@ -153,21 +153,23 @@ function frame(now: number): void {
   if (game.won) winOverlay.style.display = "flex";
   updateHud();
 
-  // The flame's breathing modulates the real point light: mutate the torch intensity for
-  // this render, restore after, so the slider keeps owning the base value.
+  // The flame's breathing modulates the real point light (intensity), and its sway MOVES
+  // the light around the player — that position wander is what makes the shading dance on
+  // the walls. Intensity is mutate-and-restore so the slider keeps owning the base value.
   const tSec = now / 1000;
+  const sway = torchSway(tSec);
   const baseIntensity = settings.torch.intensity;
   settings.torch.intensity = baseIntensity * torchFlicker(tSec);
 
   // Sprites draw into whichever buffer the walls just rendered to, using ITS depth buffer,
   // so SSAA smooths their edges like everything else.
   if (settings.ssaa) {
-    raycasterHi.render(player, materials, settings);
+    raycasterHi.render(player, materials, settings, sway);
     drawSprites(fbHi, raycasterHi);
     renderHeldTorch(fbHi, tSec);
     downsampleInto(fbHi, fb, SSAA);
   } else {
-    raycaster.render(player, materials, settings);
+    raycaster.render(player, materials, settings, sway);
     drawSprites(fb, raycaster);
     renderHeldTorch(fb, tSec);
   }

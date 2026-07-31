@@ -152,6 +152,24 @@ describe("full-pipeline smoke render", () => {
     expect(s.distinct).toBeGreaterThan(2000);
   });
 
+  it("offsetting the torch light position visibly shifts the wall lighting", () => {
+    renderFrame("full", 1.5, 1.5, 0);
+    const base = Float32Array.from(fb.data);
+    raycaster.render(
+      new Player(1.5, 1.5, 0),
+      materials,
+      defaultSettings(),
+      { x: 0.25, y: 0.15, z: 0.08 }, // a hand-wave of torch movement
+    );
+    let changed = 0;
+    for (let i = 0; i < base.length; i += 3) {
+      if (Math.abs(fb.data[i] - base[i]) > 0.003) changed++;
+    }
+    // The highlight and falloff must crawl across a good chunk of the frame — this is
+    // the "shadows dance with the flame" effect, so a near-identical frame is a failure.
+    expect(changed / (base.length / 3)).toBeGreaterThan(0.2);
+  });
+
   it("depth buffer holds sane perpendicular distances after a frame", () => {
     renderFrame("full", 1.5, 1.5, 0);
     for (let x = 0; x < W; x++) {

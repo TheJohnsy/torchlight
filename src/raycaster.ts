@@ -77,9 +77,18 @@ export class Raycaster {
     this.depth = new Float32Array(fb.width);
   }
 
-  render(player: Player, mats: MaterialSet, settings: Settings): void {
-    this.renderFloorCeiling(player, mats, settings);
-    this.renderWalls(player, mats, settings);
+  /**
+   * `lightOff` displaces the torch light (and shading eye) from the player — the flame
+   * sway. Rays still originate at the player; only the shading positions move.
+   */
+  render(
+    player: Player,
+    mats: MaterialSet,
+    settings: Settings,
+    lightOff: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
+  ): void {
+    this.renderFloorCeiling(player, mats, settings, lightOff);
+    this.renderWalls(player, mats, settings, lightOff);
   }
 
   /**
@@ -88,12 +97,20 @@ export class Raycaster {
    * eye exactly halfway up the wall, the ceiling is the mirror image, so one distance and
    * one world walk serve both planes.
    */
-  private renderFloorCeiling(player: Player, mats: MaterialSet, settings: Settings): void {
+  private renderFloorCeiling(
+    player: Player,
+    mats: MaterialSet,
+    settings: Settings,
+    lightOff: { x: number; y: number; z: number },
+  ): void {
     const { fb } = this;
     const w = fb.width;
     const h = fb.height;
     const px = player.x;
     const py = player.y;
+    const lx = px + lightOff.x;
+    const ly = py + lightOff.y;
+    const lz = EYE_Z + lightOff.z;
     const dirX = player.dirX;
     const dirY = player.dirY;
     const planeX = -dirY * PLANE_HALF;
@@ -127,7 +144,7 @@ export class Raycaster {
           albedo.r, albedo.g, albedo.b,
           tsNormal.x, tsNormal.y, tsNormal.z,
           fx, fy, 0,
-          px, py, EYE_Z,
+          lx, ly, lz,
         );
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
 
@@ -139,19 +156,27 @@ export class Raycaster {
           albedo.r, albedo.g, albedo.b,
           tsNormal.x, -tsNormal.y, -tsNormal.z,
           fx, fy, 1,
-          px, py, EYE_Z,
+          lx, ly, lz,
         );
         fb.setPixel(x, yCeil, shaded.r, shaded.g, shaded.b);
       }
     }
   }
 
-  private renderWalls(player: Player, mats: MaterialSet, settings: Settings): void {
+  private renderWalls(
+    player: Player,
+    mats: MaterialSet,
+    settings: Settings,
+    lightOff: { x: number; y: number; z: number },
+  ): void {
     const { fb, map } = this;
     const w = fb.width;
     const h = fb.height;
     const px = player.x;
     const py = player.y;
+    const lx = px + lightOff.x;
+    const ly = py + lightOff.y;
+    const lz = EYE_Z + lightOff.z;
     const dirX = player.dirX;
     const dirY = player.dirY;
     // Camera plane is perpendicular to the view direction; screen-right is +plane.
@@ -254,7 +279,7 @@ export class Raycaster {
           albedo.r, albedo.g, albedo.b,
           wnx, wny, wnz,
           hitX, hitY, v,
-          px, py, EYE_Z,
+          lx, ly, lz,
         );
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }

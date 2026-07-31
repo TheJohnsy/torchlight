@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LinearFramebuffer } from "../src/framebuffer";
-import { renderHeldTorch, torchFlicker } from "../src/heldtorch";
+import { renderHeldTorch, torchFlicker, torchSway } from "../src/heldtorch";
 
 const W = 320;
 const H = 200;
@@ -21,6 +21,30 @@ describe("torchFlicker (shared by the flame sprite and the actual light)", () =>
       if (Math.abs(torchFlicker(t) - torchFlicker(0)) > 0.02) varies = true;
     }
     expect(varies).toBe(true);
+  });
+});
+
+describe("torchSway (light-position jitter — what makes shadows dance)", () => {
+  it("stays a small offset around the player, never a teleport", () => {
+    for (let t = 0; t < 10; t += 0.07) {
+      const s = torchSway(t);
+      expect(Math.abs(s.x)).toBeLessThan(0.2);
+      expect(Math.abs(s.y)).toBeLessThan(0.2);
+      expect(Math.abs(s.z)).toBeLessThan(0.1);
+    }
+  });
+
+  it("is deterministic, moves over time, and the axes are decorrelated", () => {
+    expect(torchSway(2)).toEqual(torchSway(2));
+    let moves = false;
+    let decorrelated = false;
+    for (let t = 0; t < 4; t += 0.1) {
+      const s = torchSway(t);
+      if (Math.abs(s.x - torchSway(0).x) > 0.01) moves = true;
+      if (Math.abs(s.x - s.y) > 0.01) decorrelated = true; // not one shared stream
+    }
+    expect(moves).toBe(true);
+    expect(decorrelated).toBe(true);
   });
 });
 

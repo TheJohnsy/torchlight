@@ -18,12 +18,26 @@ const FLAME_H = 0.26; // flame height above the tip
 const FLAME_W = 0.042;
 
 /**
- * The torch's breathing, in [0.85, 1.15]: multiplies BOTH the flame's height and the
+ * The torch's breathing, in [0.72, 1.14]: multiplies BOTH the flame's height and the
  * actual point-light intensity, so the room dims exactly when the flame shrinks. One
  * noise stream, two uses — the project's core idea applied to light itself.
  */
 export function torchFlicker(t: number): number {
-  return 0.85 + 0.3 * fbm2(t * 3.1, 3.7, 2);
+  return 0.72 + 0.42 * fbm2(t * 2.6, 3.7, 3);
+}
+
+/**
+ * Where the flame IS, relative to the player: a small noise-driven wander of the light's
+ * position. Moving the light (not just dimming it) is what makes highlights and shading
+ * crawl across the normal-mapped stone — the "shadows dancing" of a real torch. Three
+ * independent noise streams so the motion never looks like a slide on one axis.
+ */
+export function torchSway(t: number): { x: number; y: number; z: number } {
+  return {
+    x: (fbm2(t * 2.1, 11.3, 3) - 0.5) * 0.3,
+    y: (fbm2(t * 2.4, 27.9, 3) - 0.5) * 0.3,
+    z: (fbm2(t * 2.8, 43.1, 3) - 0.5) * 0.15,
+  };
 }
 
 /** Distance from point to the handle segment + the segment parameter t01 of the foot. */
@@ -41,7 +55,7 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
   const h = fb.height;
   // Bounding region of everything we might touch, clipped to the frame.
   const x0 = Math.max(0, Math.floor(w - 1 - 0.6 * h));
-  const y0 = Math.max(0, Math.floor(h - 1 - 0.66 * h));
+  const y0 = Math.max(0, Math.floor(h - 1 - 0.78 * h));
 
   // Whole-flame breathing — the same stream that drives the room light in main.ts.
   const breathe = torchFlicker(t);
@@ -55,19 +69,26 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
       // Intensity = (vertical envelope × lateral envelope) × scrolling turbulence. The
       // turbulence multiplier is what tears the silhouette into rising tongues; the color
       // ramp over intensity gives red rim → orange body → yellow → white-hot core.
+      // The flame starts BELOW the collar top (h01 < 0) and ramps in, so it visibly wells
+      // up out of the iron collar instead of being stacked on top of it — that ramp +
+      // the base width matching the collar is what fixes the seam.
       const h01 = (v - BY) / (FLAME_H * breathe);
-      if (h01 >= -0.02 && h01 <= 1.15) {
+      if (h01 >= -0.1 && h01 <= 1.15) {
         // Axis sways more toward the tip; the base stays pinned to the torch head.
         const wobble = (fbm2(h01 * 2.6 + 5.2, t * 2.2, 3) - 0.5) * 0.13 * Math.max(0, h01);
         const du = u - (BX + wobble);
-        // Width tapers with height but never to zero — the tip is torn off by noise, not
+        // Real-flame width profile: collar-narrow at the base, widest around 30% up,
+        // tapering toward the tip — never to zero, the tip is torn off by noise, not
         // pinched by geometry (a geometric pinch is what read as a cartoon droplet).
-        const halfw = FLAME_W * (1 - 0.72 * h01) + 0.01;
+        const profile = h01 < 0.3 ? 0.55 + 1.5 * h01 : 1 - 0.78 * (h01 - 0.3);
+        const halfw = FLAME_W * profile + 0.008;
         const norm = Math.abs(du) / halfw;
         if (norm <= 1.25) {
           // Turbulence scrolls DOWN in texture space → tongues rise in screen space.
           const turb = fbm2(u * 26 + 7.7, v * 26 - t * 7.5, 4);
-          const envelope = Math.max(0, 1 - 0.85 * h01) * Math.max(0, 1 - norm * norm);
+          const rise = Math.min(1, (h01 + 0.1) / 0.22); // fade-in across the collar lip
+          const envelope =
+            rise * Math.max(0, 1 - 0.85 * h01) * Math.max(0, 1 - norm * norm);
           const heat = envelope * (0.45 + 1.05 * turb);
           if (heat > 0.14) {
             fb.setPixel(
@@ -98,8 +119,15 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
       const round = Math.sqrt(Math.max(0, 1 - (d / HANDLE_HALF) * (d / HANDLE_HALF)));
       const shade = 0.35 + 0.65 * round;
       if (t01 > 0.9) {
-        // Iron collar holding the wick.
-        fb.setPixel(x, y, 0.3 * shade, 0.3 * shade, 0.34 * shade);
+        // Iron collar holding the wick — firelit from above: cool steel at its lower
+        // edge blending to ember-orange at the lip, so metal and flame share the seam.
+        const lip = (t01 - 0.9) / 0.1;
+        fb.setPixel(
+          x, y,
+          (0.3 + 0.95 * lip) * shade,
+          (0.3 + 0.42 * lip) * shade,
+          (0.34 + 0.02 * lip) * shade,
+        );
       } else if (t01 > 0.32 && t01 < 0.62) {
         // Leather grip wrap, ribbed by bands along the shaft.
         const band = 0.8 + 0.2 * Math.sin(t01 * 90);
