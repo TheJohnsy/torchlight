@@ -20,7 +20,10 @@ First-person dungeon crawler rendered by a hand-written software rasterizer onto
   Convention: `v` increases **upward** along a wall and equals world `z` (floor 0 → ceiling 1).
 - Prefer readable, commented math over cleverness — every non-obvious step gets a one-line
   "what and why" comment, because this code is explained to a grader.
-- Keep gameplay trivial; this is a graphics project.
+- The project is a graphics course project AND a real game — both. Gameplay should be a
+  genuinely playable dungeon crawl (explore, loot, fight, win), but every gameplay feature
+  must also demonstrate a course technique (the roadmap rule in `tasks/todo.md`). No
+  gameplay for its own sake; no tech demo without a game around it.
 
 ## The one core idea
 One noise field, three uses: (1) FBm noise → albedo via a color ramp, (2) the *gradient* of the
