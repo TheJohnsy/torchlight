@@ -36,6 +36,16 @@ screen and name the technique behind it.
       load-bearing: the key tests per-column against `Raycaster.depth` (`src/sprite.ts`)
 - [x] Emissive loot feeding bloom — the key's >1 linear gold blooms when enabled
 
+### Phase E0 — procedural dungeon generation (map becomes computed, like everything else)
+Anchor: the procedural-content/noise lectures — seeded hashing makes generation
+deterministic and repeatable, same principle as the seeded noise fields.
+- [x] Seeded PRNG + `generateDungeon(seed)`: scattered non-overlapping rooms, L-corridors,
+      guaranteed connectivity (validated by flood fill, rejection-resample on failure)
+- [x] Vault room sealed behind the one door; key placed in the farthest ordinary room
+- [x] Treasure gems scattered in rooms, jackpot inside the vault; pickup counter
+- [x] Same `GridMap` contract — renderer untouched; authored level stays for tests
+- [x] URL `?seed=` for reproducible dungeons in the demo
+
 ### Phase E1 — one mob (richest single feature: unlocks 3 slides)
 - [ ] Procedurally-drawn slime/bat sprite (Worley/FBm blobs — no assets, ever)
 - [ ] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides)

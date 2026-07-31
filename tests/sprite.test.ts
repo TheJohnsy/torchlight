@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LinearFramebuffer } from "../src/framebuffer";
 import { Player } from "../src/player";
-import { keyTexel, projectSprite, renderSprite } from "../src/sprite";
+import { gemTexel, keyTexel, projectSprite, renderSprite } from "../src/sprite";
 import type { Color } from "../src/types";
 
 const scratch: Color = { r: 0, g: 0, b: 0 };
@@ -60,6 +60,43 @@ describe("renderSprite depth occlusion", () => {
     const depth = new Float32Array(20).fill(0.5);
     renderSprite(fb, depth, new Player(0, 0, 0), 2, 0, opaque);
     expect(Array.from(fb.data).every((v) => v === 0)).toBe(true);
+  });
+});
+
+describe("renderSprite size options", () => {
+  const opaque = (_u: number, _v: number, out: Color): number => {
+    out.r = 1;
+    out.g = 1;
+    out.b = 1;
+    return 1;
+  };
+
+  it("a smaller size covers fewer pixels", () => {
+    const count = (size: number): number => {
+      const fb = new LinearFramebuffer(40, 40);
+      const depth = new Float32Array(40).fill(100);
+      renderSprite(fb, depth, new Player(0, 0, 0), 2, 0, opaque, { size, zCenter: 0.35 });
+      let lit = 0;
+      for (let i = 0; i < fb.data.length; i += 3) if (fb.data[i] > 0) lit++;
+      return lit;
+    };
+    const big = count(0.45);
+    const small = count(0.2);
+    expect(small).toBeGreaterThan(0);
+    expect(small).toBeLessThan(big);
+  });
+});
+
+describe("gemTexel (procedural treasure sprite)", () => {
+  it("is transparent at the corners, opaque at the center", () => {
+    expect(gemTexel(0.02, 0.02, scratch)).toBe(0);
+    expect(gemTexel(0.98, 0.98, scratch)).toBe(0);
+    expect(gemTexel(0.5, 0.5, scratch)).toBeGreaterThan(0.5);
+  });
+
+  it("glows emerald: green leads red", () => {
+    gemTexel(0.5, 0.5, scratch);
+    expect(scratch.g).toBeGreaterThan(scratch.r);
   });
 });
 

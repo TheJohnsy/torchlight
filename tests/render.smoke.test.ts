@@ -134,6 +134,24 @@ describe("full-pipeline smoke render", () => {
     expect(golden).toBeGreaterThan(20);
   });
 
+  it("renders a procedurally generated dungeon end-to-end", async () => {
+    const { generateDungeon } = await import("../src/mapgen");
+    const { map: genMap, placements } = generateDungeon(7);
+    const genCaster = new Raycaster(fb, genMap);
+    const settings = defaultSettings();
+    // Face along +x from spawn — generated rooms are ≥3 wide so something is in view.
+    genCaster.render(
+      new Player(placements.spawn.x, placements.spawn.y, 0.4),
+      materials,
+      settings,
+    );
+    dumpPPM("gen-dungeon");
+    const s = frameStats();
+    expect(s.nonBlack).toBeGreaterThan(0.5);
+    expect(s.mean).toBeGreaterThan(0.01);
+    expect(s.distinct).toBeGreaterThan(2000);
+  });
+
   it("depth buffer holds sane perpendicular distances after a frame", () => {
     renderFrame("full", 1.5, 1.5, 0);
     for (let x = 0; x < W; x++) {

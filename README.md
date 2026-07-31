@@ -32,9 +32,12 @@ toggles: bilinear filtering, 2× supersampling, distance fog, torch bloom.
 
 ## The game (deliberately tiny)
 
-Somewhere in the dungeon floats a **glowing key** — a procedural billboard sprite, occluded
-per column by the wall depth buffer. Walk over it and the wooden **vault door** in the
-south-east swings open; step inside the vault to win.
+Every playthrough generates a **fresh procedural dungeon** — seeded rooms, corridors, and a
+locked vault, flood-fill validated so the run is always completable (`?seed=N` in the URL
+reproduces a dungeon exactly). Somewhere in it floats a **glowing key** — a procedural
+billboard sprite, occluded per column by the wall depth buffer. Walk over it and the wooden
+**vault door** swings open; step inside the vault to win. Emerald **gems** along the way
+feed a loot counter, with the jackpot inside the vault.
 
 ## How it works, briefly
 

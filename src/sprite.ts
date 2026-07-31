@@ -9,9 +9,15 @@ import type { Color } from "./types";
  * glowing key, the one thing in the dungeon that is its own light source.
  */
 
-/** The key floats a little above the floor, this many world units tall/wide. */
-const KEY_SIZE = 0.45;
-const KEY_Z_CENTER = 0.35;
+/** Default sprite placement: floats a little above the floor, world units tall/wide. */
+const DEFAULT_SIZE = 0.45;
+const DEFAULT_Z_CENTER = 0.35;
+
+/** World-space footprint of a billboard: square of `size` units centered at `zCenter`. */
+export interface SpriteOptions {
+  size: number;
+  zCenter: number;
+}
 /** Eye height — must match the raycaster's EYE_Z so sprites sit on the same horizon. */
 const EYE_Z = 0.5;
 
@@ -66,18 +72,19 @@ export function renderSprite(
   sx: number,
   sy: number,
   texel: SpriteTexel,
+  opts: SpriteOptions = { size: DEFAULT_SIZE, zCenter: DEFAULT_Z_CENTER },
 ): void {
   const w = fb.width;
   const h = fb.height;
   const p = projectSprite(player, sx, sy, w, h);
   if (!p) return;
 
-  const half = (p.size * KEY_SIZE) / 2;
+  const half = (p.size * opts.size) / 2;
   const x0 = Math.max(0, Math.ceil(p.screenX - half));
   const x1 = Math.min(w - 1, Math.floor(p.screenX + half));
   // Rows from world z, same mapping as the wall slice: screenY = h/2 + (EYE_Z - z)·h/depth.
-  const zTop = KEY_Z_CENTER + KEY_SIZE / 2;
-  const zBot = KEY_Z_CENTER - KEY_SIZE / 2;
+  const zTop = opts.zCenter + opts.size / 2;
+  const zBot = opts.zCenter - opts.size / 2;
   const yTop = h / 2 + ((EYE_Z - zTop) * h) / p.depth;
   const yBot = h / 2 + ((EYE_Z - zBot) * h) / p.depth;
   const y0 = Math.max(0, Math.ceil(yTop));
@@ -94,6 +101,25 @@ export function renderSprite(
       fb.setPixel(x, y, texelColor.r, texelColor.g, texelColor.b);
     }
   }
+}
+
+/**
+ * Procedural emerald gem: a cut-stone rhombus, brighter above the girdle line like light
+ * entering the crown. Emissive (>1 linear green) so bloom picks it up. No assets.
+ */
+export function gemTexel(u: number, v: number, out: Color): number {
+  // Rhombus |du|/a + |dv|/b <= 1 around the center; slightly taller than wide.
+  const du = Math.abs(u - 0.5) / 0.32;
+  const dv = Math.abs(v - 0.5) / 0.42;
+  if (du + dv > 1) return 0;
+  // Facets: the crown (upper half) catches more light; a bright girdle line splits them.
+  const crown = v > 0.5 ? 1.25 : 0.85;
+  const girdle = Math.abs(v - 0.5) < 0.04 ? 1.35 : 1;
+  const glow = crown * girdle;
+  out.r = 0.15 * glow;
+  out.g = 1.05 * glow;
+  out.b = 0.65 * glow;
+  return 1;
 }
 
 /**

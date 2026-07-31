@@ -1,13 +1,14 @@
 import { applyBloom } from "./bloom";
 import { createDebugPanel, defaultSettings } from "./debug";
 import { downsampleInto, LinearFramebuffer } from "./framebuffer";
-import { GameState, KEY_POS } from "./game";
-import { Cell, level1 } from "./map";
+import { GameState } from "./game";
+import { Cell } from "./map";
+import { generateDungeon } from "./mapgen";
 import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMaterial } from "./material";
 import { Player } from "./player";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
-import { keyTexel, renderSprite } from "./sprite";
+import { gemTexel, keyTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
 const W = 320;
@@ -24,8 +25,12 @@ const fbHi = new LinearFramebuffer(W * SSAA, H * SSAA);
 // Bloom scratch (bright-pass + blur ping-pong), display-res: bloom runs after any resolve.
 const bloomA = new LinearFramebuffer(W, H);
 const bloomB = new LinearFramebuffer(W, H);
-const map = level1();
-const player = new Player(1.5, 1.5, 0);
+// Every playthrough gets a fresh procedural dungeon; ?seed=N reproduces one exactly
+// (deterministic generation — same principle as the seeded noise fields).
+const urlSeed = Number(new URLSearchParams(location.search).get("seed"));
+const seed = Number.isFinite(urlSeed) && urlSeed !== 0 ? urlSeed : (Date.now() % 100000) + 1;
+const { map, placements } = generateDungeon(seed);
+const player = new Player(placements.spawn.x, placements.spawn.y, 0);
 const raycaster = new Raycaster(fb, map);
 const raycasterHi = new Raycaster(fbHi, map);
 
@@ -50,9 +55,44 @@ addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 const down = (...ks: string[]) => ks.some((k) => keys.has(k));
 
 const settings = defaultSettings();
-const fpsEl = createDebugPanel(document.getElementById("debug-panel")!, settings);
-const game = new GameState();
+const panelRoot = document.getElementById("debug-panel")!;
+const fpsEl = createDebugPanel(panelRoot, settings);
+const game = new GameState(placements);
 const winOverlay = document.getElementById("win-overlay")!;
+// Run readout: which dungeon this is and how much of it you've looted.
+const runEl = document.createElement("div");
+panelRoot.append(runEl);
+const updateRunReadout = (): void => {
+  const kv = game.hasKey ? "🔑" : "—";
+  runEl.textContent = `seed ${seed} · gems ${game.collected}/${game.treasures.length} · key ${kv}`;
+};
+updateRunReadout();
+
+/** Key + surviving gems, painter-sorted far→near so overlapping billboards layer right. */
+function drawSprites(buf: LinearFramebuffer, caster: Raycaster): void {
+  const sprites: { x: number; y: number; draw: () => void }[] = [];
+  if (!game.hasKey) {
+    sprites.push({
+      x: placements.key.x,
+      y: placements.key.y,
+      draw: () =>
+        renderSprite(buf, caster.depth, player, placements.key.x, placements.key.y, keyTexel),
+    });
+  }
+  for (const t of game.treasures) {
+    if (t.taken) continue;
+    sprites.push({
+      x: t.x,
+      y: t.y,
+      draw: () =>
+        renderSprite(buf, caster.depth, player, t.x, t.y, gemTexel, { size: 0.28, zCenter: 0.3 }),
+    });
+  }
+  const d2 = (s: { x: number; y: number }) =>
+    (s.x - player.x) ** 2 + (s.y - player.y) ** 2;
+  sprites.sort((a, b) => d2(b) - d2(a));
+  for (const s of sprites) s.draw();
+}
 let fpsFrames = 0;
 let fpsTime = 0;
 
@@ -76,16 +116,17 @@ function frame(now: number): void {
 
   game.update(player, map);
   if (game.won) winOverlay.style.display = "flex";
+  updateRunReadout();
 
-  // Sprite draws into whichever buffer the walls just rendered to, using ITS depth buffer,
-  // so SSAA smooths the key's edges like everything else.
+  // Sprites draw into whichever buffer the walls just rendered to, using ITS depth buffer,
+  // so SSAA smooths their edges like everything else.
   if (settings.ssaa) {
     raycasterHi.render(player, materials, settings);
-    if (!game.hasKey) renderSprite(fbHi, raycasterHi.depth, player, KEY_POS.x, KEY_POS.y, keyTexel);
+    drawSprites(fbHi, raycasterHi);
     downsampleInto(fbHi, fb, SSAA);
   } else {
     raycaster.render(player, materials, settings);
-    if (!game.hasKey) renderSprite(fb, raycaster.depth, player, KEY_POS.x, KEY_POS.y, keyTexel);
+    drawSprites(fb, raycaster);
   }
   if (settings.bloom) {
     applyBloom(fb, bloomA, bloomB, {

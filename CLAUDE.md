@@ -24,10 +24,12 @@ geometry detail. Normals feed Phong lighting from a single attenuated point ligh
 at the player's position — so the specular highlight slides across the stone as you move.
 
 ## Layout
-`src/main.ts` bootstrap/loop · `framebuffer.ts` · `raycaster.ts` DDA + wall/floor casting ·
-`lighting.ts` Phong + attenuation · `player.ts` · `map.ts` · `noise.ts` value/Perlin/FBm ·
-`material.ts` stone/brick/floor · `sampler.ts` baked texel cache · `debug.ts` toggle panel ·
-`harness.html` + `src/harness.ts` standalone material viewer.
+`src/main.ts` bootstrap/loop · `framebuffer.ts` (+ SSAA resolve) · `raycaster.ts` DDA +
+wall/floor casting · `lighting.ts` Phong + attenuation · `bloom.ts` post-process ·
+`sprite.ts` billboards (key/gems) · `player.ts` · `map.ts` grid + authored level ·
+`mapgen.ts` seeded procedural dungeons · `game.ts` key/door/win state · `noise.ts`
+value/Perlin/FBm · `material.ts` stone/brick/floor/door · `sampler.ts` baked texel cache ·
+`debug.ts` toggle panel · `harness.html` + `src/harness.ts` standalone material viewer.
 
 ## Commands
 `npm run dev` · `npm test` (vitest, pure-math tests) · `npm run build` (tsc + vite).
