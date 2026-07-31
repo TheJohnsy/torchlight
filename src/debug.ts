@@ -6,6 +6,8 @@ export type RenderMode = "full" | "albedo" | "normals" | "lighting";
 export interface Settings {
   mode: RenderMode;
   torch: Torch;
+  /** Turn sensitivity, radians/second at full deflection. */
+  turnSpeed: number;
   /** Bilinear vs nearest texture sampling (stretch). */
   bilinear: boolean;
   /** 2× supersampling anti-aliasing (stretch): render hi-res, box-resolve down. */
@@ -23,6 +25,7 @@ export function defaultSettings(): Settings {
   return {
     mode: "full",
     torch: defaultTorch(),
+    turnSpeed: 2.4,
     bilinear: false,
     ssaa: false,
     fog: false,
@@ -85,6 +88,22 @@ export function createDebugPanel(root: HTMLElement, settings: Settings): HTMLEle
     readout.textContent = `intensity ${settings.torch.intensity.toFixed(2)}`;
   });
   torchFs.append(slider, readout);
+
+  const controls = fieldset(root, "controls");
+  const turn = document.createElement("input");
+  turn.type = "range";
+  turn.min = "0.6";
+  turn.max = "6";
+  turn.step = "0.1";
+  turn.value = String(settings.turnSpeed);
+  turn.style.width = "100%";
+  const turnReadout = document.createElement("div");
+  turnReadout.textContent = `turn speed ${settings.turnSpeed.toFixed(1)} rad/s`;
+  turn.addEventListener("input", () => {
+    settings.turnSpeed = Number(turn.value);
+    turnReadout.textContent = `turn speed ${settings.turnSpeed.toFixed(1)} rad/s`;
+  });
+  controls.append(turn, turnReadout);
 
   const extras = fieldset(root, "sampling & fog");
   const bilinear = document.createElement("input");

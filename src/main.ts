@@ -8,6 +8,7 @@ import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMater
 import { Player } from "./player";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
+import { renderHeldTorch } from "./heldtorch";
 import { gemTexel, keyTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
@@ -96,8 +97,7 @@ function drawSprites(buf: LinearFramebuffer, caster: Raycaster): void {
 let fpsFrames = 0;
 let fpsTime = 0;
 
-const MOVE_SPEED = 2.6; // units/sec
-const TURN_SPEED = 2.4; // rad/sec
+const MOVE_SPEED = 2.6; // units/sec (turn speed lives in settings — panel slider)
 
 // --- game loop ---------------------------------------------------------------------------
 let last = performance.now();
@@ -111,7 +111,7 @@ function frame(now: number): void {
   const strafe = (down("d") ? 1 : 0) - (down("a") ? 1 : 0);
   const turn = (down("arrowright", "e") ? 1 : 0) - (down("arrowleft", "q") ? 1 : 0);
 
-  player.turn(turn * TURN_SPEED * dt);
+  player.turn(turn * settings.turnSpeed * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
 
   game.update(player, map);
@@ -123,10 +123,12 @@ function frame(now: number): void {
   if (settings.ssaa) {
     raycasterHi.render(player, materials, settings);
     drawSprites(fbHi, raycasterHi);
+    renderHeldTorch(fbHi, now / 1000);
     downsampleInto(fbHi, fb, SSAA);
   } else {
     raycaster.render(player, materials, settings);
     drawSprites(fb, raycaster);
+    renderHeldTorch(fb, now / 1000);
   }
   if (settings.bloom) {
     applyBloom(fb, bloomA, bloomB, {
