@@ -13,6 +13,10 @@ export interface Settings {
   /** Distance fog (stretch). */
   fog: boolean;
   fogDensity: number;
+  /** Torch bloom (stretch): overbright speculars leak a soft halo. */
+  bloom: boolean;
+  bloomThreshold: number;
+  bloomStrength: number;
 }
 
 export function defaultSettings(): Settings {
@@ -23,6 +27,9 @@ export function defaultSettings(): Settings {
     ssaa: false,
     fog: false,
     fogDensity: 0.22,
+    bloom: false,
+    bloomThreshold: 0.7, // only genuinely hot pixels glow; sub-white stone stays matte
+    bloomStrength: 0.7,
   };
 }
 
@@ -95,6 +102,11 @@ export function createDebugPanel(root: HTMLElement, settings: Settings): HTMLEle
   fog.checked = settings.fog;
   fog.addEventListener("change", () => (settings.fog = fog.checked));
   labeled(extras, fog, "distance fog");
+  const bloom = document.createElement("input");
+  bloom.type = "checkbox";
+  bloom.checked = settings.bloom;
+  bloom.addEventListener("change", () => (settings.bloom = bloom.checked));
+  labeled(extras, bloom, "torch bloom");
 
   const fps = document.createElement("div");
   fps.textContent = "-- fps";

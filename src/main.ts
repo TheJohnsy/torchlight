@@ -1,3 +1,4 @@
+import { applyBloom } from "./bloom";
 import { createDebugPanel, defaultSettings } from "./debug";
 import { downsampleInto, LinearFramebuffer } from "./framebuffer";
 import { Cell, level1 } from "./map";
@@ -18,6 +19,9 @@ const SSAA = 2;
 
 const fb = new LinearFramebuffer(W, H);
 const fbHi = new LinearFramebuffer(W * SSAA, H * SSAA);
+// Bloom scratch (bright-pass + blur ping-pong), display-res: bloom runs after any resolve.
+const bloomA = new LinearFramebuffer(W, H);
+const bloomB = new LinearFramebuffer(W, H);
 const map = level1();
 const player = new Player(1.5, 1.5, 0);
 const raycaster = new Raycaster(fb, map);
@@ -70,6 +74,12 @@ function frame(now: number): void {
     downsampleInto(fbHi, fb, SSAA);
   } else {
     raycaster.render(player, materials, settings);
+  }
+  if (settings.bloom) {
+    applyBloom(fb, bloomA, bloomB, {
+      threshold: settings.bloomThreshold,
+      strength: settings.bloomStrength,
+    });
   }
   fb.present(ctx);
 
