@@ -1,8 +1,9 @@
 import { LinearFramebuffer } from "./framebuffer";
+import { shadeTorch, type Torch } from "./lighting";
 import { Cell, GridMap } from "./map";
 import { Player } from "./player";
 import { BakedSampler } from "./sampler";
-import type { Color } from "./types";
+import type { Color, Normal } from "./types";
 
 /** Half-width of the camera plane = tan(FOV/2); 0.66 ≈ 66° horizontal FOV. */
 const PLANE_HALF = 0.66;
@@ -14,8 +15,13 @@ export interface MaterialSet {
   ceiling: BakedSampler;
 }
 
+/** Eye (and torch) height above the floor, in wall units. */
+const EYE_Z = 0.5;
+
 // Scratch objects reused across every pixel — the hot loop must not allocate.
 const albedo: Color = { r: 0, g: 0, b: 0 };
+const tsNormal: Normal = { x: 0, y: 0, z: 1 };
+const shaded: Color = { r: 0, g: 0, b: 0 };
 
 export class Raycaster {
   /** Perpendicular hit distance per column — kept for sprite/edge passes later (spec §5). */
@@ -28,7 +34,7 @@ export class Raycaster {
     this.depth = new Float32Array(fb.width);
   }
 
-  render(player: Player, mats: MaterialSet): void {
+  render(player: Player, mats: MaterialSet, torch: Torch): void {
     const { fb, map } = this;
     const w = fb.width;
     const h = fb.height;
@@ -109,15 +115,38 @@ export class Raycaster {
       const u = flipU ? 1 - wallX : wallX;
 
       const sampler = mats.walls.get(cell) ?? mats.walls.get(Cell.Stone)!;
-      // y-sides darkened so faces stay distinct until real lighting lands (phase 4).
-      const shade = side === 1 ? 0.7 : 1.0;
+
+      // --- tangent frame of this wall face (the "critical agreement" of spec §4) --------
+      // Outward face normal points back toward the ray; tangent points along increasing u.
+      const faceNX = side === 0 ? -Math.sign(rayDirX) : 0;
+      const faceNY = side === 1 ? -Math.sign(rayDirY) : 0;
+      const tanX = side === 1 ? (flipU ? -1 : 1) : 0;
+      const tanY = side === 0 ? (flipU ? -1 : 1) : 0;
+      // World position of the hit (perpDist is exactly the ray parameter t — see above).
+      const hitX = px + perpDist * rayDirX;
+      const hitY = py + perpDist * rayDirY;
 
       for (let y = 0; y < drawStart; y++) fb.setPixel(x, y, 0.02, 0.02, 0.025); // ceiling
       for (let y = drawStart; y <= drawEnd; y++) {
-        // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0.
+        // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0,
+        // which also makes v the fragment's world z.
         const v = 1 - (y - wallTop) / lineHeight;
         sampler.albedoAt(u, v, albedo);
-        fb.setPixel(x, y, albedo.r * shade, albedo.g * shade, albedo.b * shade);
+        sampler.normalAt(u, v, tsNormal);
+        // Rotate tangent→world: tangent x → wall tangent, tangent y → world up (z),
+        // tangent z → outward face normal.
+        const wnx = tanX * tsNormal.x + faceNX * tsNormal.z;
+        const wny = tanY * tsNormal.x + faceNY * tsNormal.z;
+        const wnz = tsNormal.y;
+        shadeTorch(
+          shaded,
+          albedo.r, albedo.g, albedo.b,
+          wnx, wny, wnz,
+          hitX, hitY, v,
+          px, py, EYE_Z,
+          torch,
+        );
+        fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }
       for (let y = drawEnd + 1; y < h; y++) fb.setPixel(x, y, 0.05, 0.05, 0.055); // floor
     }
