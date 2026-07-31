@@ -81,3 +81,34 @@ export function perlin2(x: number, y: number, period = 0): number {
   );
   return n * Math.SQRT2;
 }
+
+/**
+ * Fractal Brownian motion: octaves of Perlin, each double the frequency and half the
+ * amplitude of the last. Low octaves give the large shapes, high octaves the fine grain —
+ * this is what makes the stone read as *stone*. Normalized to [0,1] for use as a height
+ * field. Lacunarity is fixed at 2 so an integer `period` keeps tiling at every octave.
+ */
+export function fbm2(
+  x: number,
+  y: number,
+  octaves = 5,
+  opts?: { gain?: number; period?: number },
+): number {
+  const gain = opts?.gain ?? 0.5;
+  let period = opts?.period ?? 0;
+  let amp = 1;
+  let sum = 0;
+  let norm = 0;
+  let fx = x;
+  let fy = y;
+  for (let o = 0; o < octaves; o++) {
+    sum += amp * perlin2(fx, fy, period);
+    norm += amp;
+    amp *= gain;
+    fx *= 2;
+    fy *= 2;
+    if (period) period *= 2;
+  }
+  const n = 0.5 + (0.5 * sum) / norm; // [-1,1] → [0,1]
+  return n < 0 ? 0 : n > 1 ? 1 : n;
+}
