@@ -1,4 +1,4 @@
-import { fbm2, hash2 } from "./noise";
+import { fbm2, hash2, perlin2, worley2 } from "./noise";
 import type { Color, Material, Normal } from "./types";
 
 /** Central-difference step: about one texel at the 256² bake resolution. */
@@ -147,6 +147,79 @@ export class DoorMaterial implements Material {
       g: clamp01(mix(0.03, g, face)),
       b: clamp01(mix(0.025, b, face)),
     };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
+
+/**
+ * Marble (roadmap E4 — vault interior floor): the classic recipe, marble(x) = f(sin(x +
+ * turbulence)). Turbulence is Perlin *turbulence* (sum of |signal|, not signed FBm) — that
+ * absolute value is what turns smooth noise into sharp-crested veins instead of a blob field;
+ * feeding it into sin() before the color ramp is what makes the veins ripple instead of
+ * running straight. Same gradient→normal machinery as every other material, so the torch
+ * catches the vein ridges.
+ */
+export class MarbleMaterial implements Material {
+  private readonly scale = 3;
+  private readonly bump = 0.12;
+
+  private turbulence(u: number, v: number): number {
+    let t = 0, amp = 1, freq = 1;
+    for (let o = 0; o < 4; o++) {
+      t += amp * Math.abs(perlin2(u * this.scale * freq, v * this.scale * freq, this.scale * freq));
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return t;
+  }
+
+  readonly height = (u: number, v: number): number => {
+    const turb = this.turbulence(u, v);
+    const marble = Math.sin((u * this.scale + turb * 5) * Math.PI * 2);
+    return 0.5 + 0.5 * marble;
+  };
+
+  albedo(u: number, v: number): Color {
+    const h = this.height(u, v);
+    // Pale stone base; veins are a cooler, darker grey-blue where the ripple dips low.
+    const vein = clamp01((0.42 - h) * 3);
+    const base = mix(0.68, 0.82, h);
+    return {
+      r: mix(base, 0.22, vein * 0.85),
+      g: mix(base, 0.25, vein * 0.85),
+      b: mix(base * 1.03, 0.3, vein * 0.85),
+    };
+  }
+
+  normal(u: number, v: number): Normal {
+    return heightToNormal(this.height, u, v, this.bump);
+  }
+}
+
+/**
+ * Cracked stone (roadmap E4 — one wall band): StoneMaterial's fbm base, gouged by Worley
+ * noise instead of just tinted — each cell's feature point carves a small pit straight into
+ * the height field, so the torch rakes real shadow into the cracks via the same
+ * gradient→normal machinery, not a flat decal.
+ */
+export class CrackedStoneMaterial implements Material {
+  private readonly scale = 6;
+  private readonly bump = 0.32;
+  private readonly crackScale = 5;
+
+  readonly height = (u: number, v: number): number => {
+    const base = fbm2(u * this.scale, v * this.scale, 5, { period: this.scale });
+    const w = worley2(u * this.crackScale, v * this.crackScale, this.crackScale);
+    const crack = clamp01(1 - w * 2.2); // 1 right at a feature point, fading out a short way off
+    return base * (1 - crack * 0.85);
+  };
+
+  albedo(u: number, v: number): Color {
+    const h = this.height(u, v);
+    return { r: mix(0.13, 0.55, h), g: mix(0.125, 0.53, h), b: mix(0.12, 0.5, h) };
   }
 
   normal(u: number, v: number): Normal {

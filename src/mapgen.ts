@@ -24,6 +24,8 @@ export interface Placements {
   treasures: { x: number; y: number }[];
   /** The one slime (roadmap E1): spawned in some ordinary room, never the player's own. */
   mob: { x: number; y: number };
+  /** The key's room, in tile bounds like `vault` (roadmap E4: the cracked-stone wall band). */
+  keyRoomBounds: { x0: number; y0: number; x1: number; y1: number };
 }
 
 export interface Dungeon {
@@ -234,6 +236,12 @@ function tryGenerate(rng: () => number): Dungeon | null {
       vault: { x0: vault.x, y0: vault.y, x1: vault.x + vault.w, y1: vault.y + vault.h },
       treasures,
       mob,
+      keyRoomBounds: {
+        x0: keyRoom.x,
+        y0: keyRoom.y,
+        x1: keyRoom.x + keyRoom.w,
+        y1: keyRoom.y + keyRoom.h,
+      },
     },
   };
 }

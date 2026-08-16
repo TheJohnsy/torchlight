@@ -92,13 +92,26 @@ deterministic and repeatable, same principle as the seeded noise fields.
       since a camera-facing billboard has no visible rotation around its vertical axis
 
 ### Phase E3 — particles + motion blur (combat feel)
-- [ ] Torch spark particles: small noise-driven emitter, emissive, bloom-fed
-- [ ] One projectile (magic bolt) with a streak — motion-blur kernel from the slides
+- [~] Torch spark particles: tried, cut. The held torch is a screen-space viewmodel
+      overlay (`heldtorch.ts`) with no real world (x,y) — it isn't actually "at" any world
+      position, so world-space particles can never track it, and anything spawned close
+      enough to read as "near the torch" is close enough to the camera to blow up huge
+      under the perspective divide (near-plane blowup, not a tunable bug). Not worth
+      fighting the renderer's own screen-space/world-space split for a checklist bullet —
+      the mob-death burst below already demonstrates the same emitter technique, just at a
+      real world distance where it actually works.
+- [x] One projectile (magic bolt) with a streak — the fireball skill (`src/projectile.ts`),
+      already built for E1.5; its "streak" is a fading ghost-trail of past positions rather
+      than a screen-space motion-blur kernel, since the raycaster has no velocity buffer to
+      convolve. The dash skill's radial blur (`src/motionblur.ts`) is the actual
+      motion-blur-kernel technique from the slides, applied to camera surge instead
 
 ### Phase E4 — material variety (near-zero cost; noise lib exists)
-- [ ] Worley noise added to `noise.ts` (it's in the Textures deck)
-- [ ] Marble: marble(x) = f(sin(x + turbulence)) — vault interior floor
-- [ ] Cracked/Worley stone variant for one room band
+- [x] Worley noise added to `noise.ts` (`worley2`, tileable F1 cellular noise)
+- [x] Marble: marble(x) = f(sin(x + turbulence)) — vault interior floor (`MarbleMaterial`,
+      applied as a region override by world position by `raycaster.ts`, not a new Cell type)
+- [x] Cracked/Worley stone variant for one room band (`CrackedStoneMaterial`, applied to
+      the key's room — `Placements.keyRoomBounds` — via the same region-override mechanism)
 
 ### Phase E5 — boss showcase (where every effect stacks)
 - [ ] Big billboard mob guarding the vault key

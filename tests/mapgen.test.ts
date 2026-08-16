@@ -91,6 +91,16 @@ describe("generateDungeon", () => {
     }
   });
 
+  it("reports keyRoomBounds as a real room rect containing the key tile", () => {
+    const { keyRoomBounds, key } = d.placements;
+    expect(keyRoomBounds.x1).toBeGreaterThan(keyRoomBounds.x0);
+    expect(keyRoomBounds.y1).toBeGreaterThan(keyRoomBounds.y0);
+    expect(key.x).toBeGreaterThanOrEqual(keyRoomBounds.x0);
+    expect(key.x).toBeLessThanOrEqual(keyRoomBounds.x1);
+    expect(key.y).toBeGreaterThanOrEqual(keyRoomBounds.y0);
+    expect(key.y).toBeLessThanOrEqual(keyRoomBounds.y1);
+  });
+
   it("places the mob on a reachable, walkable tile outside the vault", () => {
     expect(d.map.isWall(d.placements.mob.x, d.placements.mob.y)).toBe(false);
     const v = d.placements.vault;

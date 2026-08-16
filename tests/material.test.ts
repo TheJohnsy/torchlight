@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   BrickMaterial,
   CeilingMaterial,
+  CrackedStoneMaterial,
   DoorMaterial,
   FloorMaterial,
   heightToNormal,
+  MarbleMaterial,
   StoneMaterial,
 } from "../src/material";
 import type { Material } from "../src/types";
@@ -15,6 +17,8 @@ const MATERIALS: [string, Material][] = [
   ["floor", new FloorMaterial()],
   ["ceiling", new CeilingMaterial()],
   ["door", new DoorMaterial()],
+  ["marble", new MarbleMaterial()],
+  ["cracked stone", new CrackedStoneMaterial()],
 ];
 
 describe.each(MATERIALS)("%s material", (_name, mat) => {
@@ -88,5 +92,63 @@ describe("brick height field", () => {
     const mortar = brick.height(0.3, 0); // row boundary
     const face = brick.height(0.3, 0.125); // center of row 0 (rows=4 → lv=0.5)
     expect(mortar).toBeLessThan(face);
+  });
+});
+
+describe("marble material (roadmap E4)", () => {
+  const marble = new MarbleMaterial();
+
+  it("ripples: the height field is not a flat plane or a simple linear ramp", () => {
+    const samples = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((u) =>
+      marble.height(u, 0.5),
+    );
+    // A sine-of-turbulence field must go up AND down somewhere across a full tile.
+    let rose = false, fell = false;
+    for (let i = 1; i < samples.length; i++) {
+      if (samples[i] > samples[i - 1]) rose = true;
+      if (samples[i] < samples[i - 1]) fell = true;
+    }
+    expect(rose).toBe(true);
+    expect(fell).toBe(true);
+  });
+
+  it("veins read as a cooler, darker grey-blue than the pale stone base", () => {
+    // Find a low-height (vein) sample and a high-height (base) sample, compare their albedo.
+    let veinUV: [number, number] | null = null;
+    let baseUV: [number, number] | null = null;
+    for (let i = 0; i < 50 && (!veinUV || !baseUV); i++) {
+      const u = i / 50;
+      const h = marble.height(u, 0.5);
+      if (h < 0.15 && !veinUV) veinUV = [u, 0.5];
+      if (h > 0.85 && !baseUV) baseUV = [u, 0.5];
+    }
+    expect(veinUV).not.toBeNull();
+    expect(baseUV).not.toBeNull();
+    const vein = marble.albedo(...(veinUV as [number, number]));
+    const base = marble.albedo(...(baseUV as [number, number]));
+    expect(vein.r + vein.g + vein.b).toBeLessThan(base.r + base.g + base.b);
+  });
+});
+
+describe("cracked stone material (roadmap E4)", () => {
+  const cracked = new CrackedStoneMaterial();
+  const stone = new StoneMaterial();
+
+  it("Worley-carved pits gouge the height field down from the plain stone base", () => {
+    // Scan for the deepest pit within a tile; it should read meaningfully lower than the
+    // corresponding plain-stone height at the same UV (the crack term only ever subtracts).
+    let deepest = Infinity;
+    let deepestUV: [number, number] = [0, 0];
+    for (let u = 0; u < 1; u += 0.05) {
+      for (let v = 0; v < 1; v += 0.05) {
+        const h = cracked.height(u, v);
+        if (h < deepest) {
+          deepest = h;
+          deepestUV = [u, v];
+        }
+      }
+    }
+    const plain = stone.height(...deepestUV);
+    expect(deepest).toBeLessThan(plain);
   });
 });

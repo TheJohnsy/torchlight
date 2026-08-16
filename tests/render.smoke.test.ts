@@ -6,8 +6,10 @@ import { Cell, level1 } from "../src/map";
 import {
   BrickMaterial,
   CeilingMaterial,
+  CrackedStoneMaterial,
   DoorMaterial,
   FloorMaterial,
+  MarbleMaterial,
   StoneMaterial,
 } from "../src/material";
 import { Player } from "../src/player";
@@ -228,6 +230,72 @@ describe("full-pipeline smoke render", () => {
     for (let i = 0; i < at0.length; i++) {
       expect(at1[i]).toBeCloseTo(at0[i], 5);
     }
+  });
+
+  it("a vaultFloor region override swaps the floor material only inside its bounds (roadmap E4)", () => {
+    // Look straight down at the floor from inside the vault (bottom-right room, LEVEL_1).
+    const player = new Player(20, 13.5, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withVaultFloor: MaterialSet = {
+      ...materials,
+      vaultFloor: {
+        sampler: new BakedSampler(new MarbleMaterial(), 128),
+        bounds: { x0: 18, y0: 12, x1: 23, y1: 15 }, // VAULT, from game.ts
+      },
+    };
+    raycaster.render(player, withVaultFloor, settings);
+    dumpPPM("vault-floor-marble");
+
+    let changed = 0;
+    for (let i = 0; i < plain.length; i++) {
+      if (Math.abs(fb.data[i] - plain[i]) > 0.01) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+
+  it("a vaultFloor override leaves floor OUTSIDE its bounds untouched", () => {
+    // Same look-straight-down setup, but from the spawn room — well outside the vault rect.
+    const player = new Player(2, 2, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withVaultFloor: MaterialSet = {
+      ...materials,
+      vaultFloor: {
+        sampler: new BakedSampler(new MarbleMaterial(), 128),
+        bounds: { x0: 18, y0: 12, x1: 23, y1: 15 },
+      },
+    };
+    raycaster.render(player, withVaultFloor, settings);
+    expect(Array.from(fb.data)).toEqual(Array.from(plain));
+  });
+
+  it("a crackedStone region override swaps ONLY Stone walls inside its bounds (roadmap E4)", () => {
+    // Face straight up at the top border wall (all Stone) from just inside it.
+    const player = new Player(5, 1.4, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withCracked: MaterialSet = {
+      ...materials,
+      crackedStone: {
+        sampler: new BakedSampler(new CrackedStoneMaterial(), 128),
+        bounds: { x0: 0, y0: 0, x1: 24, y1: 1 }, // the whole top wall row
+      },
+    };
+    raycaster.render(player, withCracked, settings);
+    dumpPPM("cracked-stone-band");
+
+    let changed = 0;
+    for (let i = 0; i < plain.length; i++) {
+      if (Math.abs(fb.data[i] - plain[i]) > 0.01) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
   });
 
   it("depth buffer holds sane perpendicular distances after a frame", () => {

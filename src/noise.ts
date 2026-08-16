@@ -112,3 +112,34 @@ export function fbm2(
   const n = 0.5 + (0.5 * sum) / norm; // [-1,1] → [0,1]
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
+
+/**
+ * Worley (cellular) noise, F1: the distance from (x,y) to the nearest of one randomly
+ * jittered "feature point" per lattice cell, searched across the 3×3 neighborhood so a
+ * point near a cell edge still finds points from the adjacent cells. Where Perlin/value
+ * noise are smooth height fields, Worley gives cell-like blobs and veins (roadmap E4:
+ * marble veining, cracked-stone pits) — a different noise family, same hash primitive.
+ * Range is approximately [0, 1.2]; callers clamp/scale as their material needs.
+ */
+export function worley2(x: number, y: number, period = 0): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let minD2 = Infinity;
+  for (let oy = -1; oy <= 1; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const cx = ix + ox;
+      const cy = iy + oy;
+      // Jitter is hashed from the WRAPPED cell id (so tiling repeats), but the feature
+      // point's position stays in real (unwrapped) coordinates for correct distances.
+      const hx = wrapIndex(cx, period);
+      const hy = wrapIndex(cy, period);
+      const fx = cx + hash2(hx, hy);
+      const fy = cy + hash2(hx + 101, hy + 57); // second hash channel, decorrelated from the first
+      const dx = x - fx;
+      const dy = y - fy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < minD2) minD2 = d2;
+    }
+  }
+  return Math.sqrt(minD2);
+}

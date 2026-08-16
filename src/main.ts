@@ -6,7 +6,15 @@ import { downsampleInto, LinearFramebuffer } from "./framebuffer";
 import { GameState } from "./game";
 import { Cell } from "./map";
 import { generateDungeon } from "./mapgen";
-import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMaterial } from "./material";
+import {
+  BrickMaterial,
+  CeilingMaterial,
+  CrackedStoneMaterial,
+  DoorMaterial,
+  FloorMaterial,
+  MarbleMaterial,
+  StoneMaterial,
+} from "./material";
 import { Mob } from "./mob";
 import { applyRadialBlur } from "./motionblur";
 import { linearToByte } from "./framebuffer";
@@ -53,6 +61,13 @@ const materials: MaterialSet = {
   ]),
   floor: new BakedSampler(new FloorMaterial()),
   ceiling: new BakedSampler(new CeilingMaterial()),
+  // Region overrides (roadmap E4): marble in the vault's floor, cracked stone around the
+  // key's room — by world position, not a new Cell type (see raycaster.ts's MaterialSet).
+  vaultFloor: { sampler: new BakedSampler(new MarbleMaterial()), bounds: placements.vault },
+  crackedStone: {
+    sampler: new BakedSampler(new CrackedStoneMaterial()),
+    bounds: placements.keyRoomBounds,
+  },
 };
 
 // --- input -------------------------------------------------------------------------------
