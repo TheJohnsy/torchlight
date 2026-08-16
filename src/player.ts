@@ -32,8 +32,21 @@ export class Player {
     // screen corresponds to +plane, which is (-dirY, dirX). See raycaster.ts.
     const vx = this.dirX * forward + -this.dirY * strafe;
     const vy = this.dirY * forward + this.dirX * strafe;
-    const nx = this.x + vx * dt;
-    const ny = this.y + vy * dt;
+    this.moveBy(map, vx * dt, vy * dt);
+  }
+
+  /** Raw world-space displacement (e.g. a mob's knockback), collision-checked like move(). */
+  knockback(map: GridMap, dx: number, dy: number): void {
+    this.moveBy(map, dx, dy);
+  }
+
+  /**
+   * Axis-separated collision: try x and y independently so hitting a wall at an angle
+   * slides you along it instead of stopping dead. Shared by move() and knockback().
+   */
+  private moveBy(map: GridMap, dx: number, dy: number): void {
+    const nx = this.x + dx;
+    const ny = this.y + dy;
     if (!this.blocked(map, nx, this.y)) this.x = nx;
     if (!this.blocked(map, this.x, ny)) this.y = ny;
   }

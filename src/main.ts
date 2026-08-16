@@ -1,16 +1,22 @@
 import { applyBloom } from "./bloom";
+import { TorchAttack } from "./combat";
+import { Dash } from "./dash";
 import { createDebugPanel, defaultSettings } from "./debug";
 import { downsampleInto, LinearFramebuffer } from "./framebuffer";
 import { GameState } from "./game";
 import { Cell } from "./map";
 import { generateDungeon } from "./mapgen";
 import { BrickMaterial, CeilingMaterial, DoorMaterial, FloorMaterial, StoneMaterial } from "./material";
-import { Player } from "./player";
-import { Raycaster, type MaterialSet } from "./raycaster";
-import { BakedSampler } from "./sampler";
+import { Mob } from "./mob";
+import { applyRadialBlur } from "./motionblur";
 import { linearToByte } from "./framebuffer";
 import { renderHeldTorch, torchFlicker, torchSway } from "./heldtorch";
-import { gemTexel, keyTexel, renderSprite } from "./sprite";
+import { ParticleSystem } from "./particles";
+import { Player } from "./player";
+import { Fireball, FireballLauncher } from "./projectile";
+import { Raycaster, type MaterialSet } from "./raycaster";
+import { BakedSampler } from "./sampler";
+import { fireTexel, gemTexel, heartTexel, keyFloat, keyTexel, mobTexel, renderSprite } from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
 const W = 320;
@@ -27,6 +33,8 @@ const fbHi = new LinearFramebuffer(W * SSAA, H * SSAA);
 // Bloom scratch (bright-pass + blur ping-pong), display-res: bloom runs after any resolve.
 const bloomA = new LinearFramebuffer(W, H);
 const bloomB = new LinearFramebuffer(W, H);
+// Dash's post-surge radial blur reuses one more display-res scratch buffer.
+const blurScratch = new LinearFramebuffer(W, H);
 // Every playthrough gets a fresh procedural dungeon; ?seed=N reproduces one exactly
 // (deterministic generation — same principle as the seeded noise fields).
 const urlSeed = Number(new URLSearchParams(location.search).get("seed"));
@@ -53,7 +61,7 @@ const materials: MaterialSet = {
 const keys = new Set<string>();
 addEventListener("keydown", (e) => {
   keys.add(e.code);
-  if (e.code.startsWith("Arrow")) e.preventDefault(); // don't scroll the page
+  if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault(); // don't scroll the page
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 const down = (...codes: string[]) => codes.some((c) => keys.has(c));
@@ -62,10 +70,22 @@ const settings = defaultSettings();
 const panelRoot = document.getElementById("debug-panel")!;
 const fpsEl = createDebugPanel(panelRoot, settings);
 const game = new GameState(placements);
+const mob = new Mob(placements.mob.x, placements.mob.y);
+let mobWasAlive = true; // edge-detects the kill so the death burst/gem drop fires exactly once
+
+// Combat (roadmap E1.5): torch swing, fireball skill, dash, and the particle burst they feed.
+const attack = new TorchAttack();
+const launcher = new FireballLauncher();
+const fireballs: Fireball[] = [];
+const dash = new Dash();
+const particles = new ParticleSystem();
+
 const winOverlay = document.getElementById("win-overlay")!;
+const deathOverlay = document.getElementById("death-overlay")!;
+document.getElementById("death-seed")!.textContent = `seed ${seed}`;
 
 // --- HUD: icons painted from the SAME texel functions that draw the world sprites -------
-/** Rasterize a sprite texel into a tiny HUD canvas; `dim` = not-yet-collected ghost. */
+/** Rasterize a sprite texel into a tiny HUD canvas; `dim` = not-yet-collected/lost ghost. */
 function paintIcon(cv: HTMLCanvasElement, texel: typeof keyTexel, dim: boolean): void {
   const ictx = cv.getContext("2d")!;
   const img = ictx.createImageData(cv.width, cv.height);
@@ -76,7 +96,7 @@ function paintIcon(cv: HTMLCanvasElement, texel: typeof keyTexel, dim: boolean):
       const i = (y * cv.width + x) * 4;
       if (a < 0.5) continue; // transparent — the scene shows through the HUD plate
       if (dim) {
-        // Ghost slot: flat grey silhouette says "this exists, you don't have it yet".
+        // Ghost slot: flat grey silhouette says "this exists, you don't have it (right now)".
         img.data[i] = img.data[i + 1] = img.data[i + 2] = 150;
         img.data[i + 3] = 90;
       } else {
@@ -91,28 +111,41 @@ function paintIcon(cv: HTMLCanvasElement, texel: typeof keyTexel, dim: boolean):
 }
 const hudGems = document.getElementById("hud-gems")!;
 const hudKeyCv = document.getElementById("hud-key") as HTMLCanvasElement;
+const hudHeartCvs = [0, 1, 2].map((i) => document.getElementById(`hud-heart-${i}`) as HTMLCanvasElement);
+const hudFireballFill = document.getElementById("hud-fireball-fill")!;
 document.getElementById("hud-seed")!.textContent = `seed ${seed}`;
 paintIcon(document.getElementById("hud-gem") as HTMLCanvasElement, gemTexel, false);
 paintIcon(hudKeyCv, keyTexel, true);
+paintIcon(document.getElementById("hud-fireball") as HTMLCanvasElement, fireTexel, false);
 let hudHadKey = false;
+let hudHearts = -1; // forces the first paint
 const updateHud = (): void => {
   hudGems.textContent = `${game.collected}/${game.treasures.length}`;
   if (game.hasKey && !hudHadKey) {
     hudHadKey = true;
     paintIcon(hudKeyCv, keyTexel, false); // the ghost lights up gold on pickup
   }
+  if (game.hearts !== hudHearts) {
+    hudHearts = game.hearts;
+    hudHeartCvs.forEach((cv, i) => paintIcon(cv, heartTexel, i >= game.hearts));
+  }
+  hudFireballFill.style.width = `${Math.max(0, Math.min(1, launcher.readiness())) * 100}%`;
 };
 updateHud();
 
-/** Key + surviving gems, painter-sorted far→near so overlapping billboards layer right. */
-function drawSprites(buf: LinearFramebuffer, caster: Raycaster): void {
+/** Key/gems/mob/fireballs/particles, painter-sorted far→near so overlapping billboards layer right. */
+function drawSprites(buf: LinearFramebuffer, caster: Raycaster, tSec: number): void {
   const sprites: { x: number; y: number; draw: () => void }[] = [];
   if (!game.hasKey) {
+    const floatZ = 0.35 + keyFloat(tSec);
     sprites.push({
       x: placements.key.x,
       y: placements.key.y,
       draw: () =>
-        renderSprite(buf, caster.depth, player, placements.key.x, placements.key.y, keyTexel),
+        renderSprite(buf, caster.depth, player, placements.key.x, placements.key.y, keyTexel, {
+          size: 0.45,
+          zCenter: floatZ,
+        }),
     });
   }
   for (const t of game.treasures) {
@@ -124,10 +157,56 @@ function drawSprites(buf: LinearFramebuffer, caster: Raycaster): void {
         renderSprite(buf, caster.depth, player, t.x, t.y, gemTexel, { size: 0.28, zCenter: 0.3 }),
     });
   }
+  if (mob.alive) {
+    // Hit-flash: while the swing/fireball's white flash is running, override to a bright
+    // near-white so the hit reads clearly, then fall back to the normal slime texel.
+    const texel = mob.flashing
+      ? (u: number, v: number, out: { r: number; g: number; b: number }): number => {
+          const a = mobTexel(u, v, out);
+          if (a > 0) {
+            out.r = 1.5;
+            out.g = 1.5;
+            out.b = 1.5;
+          }
+          return a;
+        }
+      : mobTexel;
+    const shake = mob.shakeOffset(); // draw-only jitter — never mutates mob.x/y
+    sprites.push({
+      x: mob.x,
+      y: mob.y,
+      draw: () =>
+        renderSprite(buf, caster.depth, player, mob.x + shake.x, mob.y + shake.y, texel, {
+          size: 0.5,
+          zCenter: 0.25 + mob.bobOffset(),
+        }),
+    });
+  }
+  for (const f of fireballs) {
+    const trailLen = f.trail.length;
+    f.trail.forEach((p, i) => {
+      const t = 1 - i / trailLen;
+      sprites.push({
+        x: p.x,
+        y: p.y,
+        draw: () =>
+          renderSprite(buf, caster.depth, player, p.x, p.y, fireTexel, {
+            size: 0.14 * t,
+            zCenter: 0.3,
+          }),
+      });
+    });
+    sprites.push({
+      x: f.x,
+      y: f.y,
+      draw: () => renderSprite(buf, caster.depth, player, f.x, f.y, fireTexel, { size: 0.18, zCenter: 0.3 }),
+    });
+  }
   const d2 = (s: { x: number; y: number }) =>
     (s.x - player.x) ** 2 + (s.y - player.y) ** 2;
   sprites.sort((a, b) => d2(b) - d2(a));
   for (const s of sprites) s.draw();
+  particles.draw(buf, caster.depth, player);
 }
 let fpsFrames = 0;
 let fpsTime = 0;
@@ -141,6 +220,13 @@ function frame(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
 
+  if (game.dead) {
+    deathOverlay.style.display = "flex";
+    if (down("KeyR")) location.search = `?seed=${seed}`; // reload into the same dungeon
+    requestAnimationFrame(frame);
+    return;
+  }
+
   const run = down("ShiftLeft", "ShiftRight") ? 1.8 : 1;
   const forward = (down("KeyW", "ArrowUp") ? 1 : 0) - (down("KeyS", "ArrowDown") ? 1 : 0);
   const strafe = (down("KeyD") ? 1 : 0) - (down("KeyA") ? 1 : 0);
@@ -148,8 +234,36 @@ function frame(now: number): void {
 
   player.turn(turn * settings.turnSpeed * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
+  if (mob.update(dt, player, map)) game.damagePlayer();
 
-  game.update(player, map);
+  // Torch swing: held so a press auto-repeats once the swing/cooldown clears.
+  if (down("Space")) attack.trigger();
+  attack.update(dt, player, mob, map);
+
+  // Fireball: cooldown-gated, same auto-repeat-while-held feel as the swing.
+  if (down("KeyF")) {
+    const bolt = launcher.fire(player.x, player.y, player.dirX, player.dirY);
+    if (bolt) fireballs.push(bolt);
+  }
+  launcher.tick(dt);
+  for (const bolt of fireballs) bolt.update(dt, map, mob);
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    if (!fireballs[i].alive) fireballs.splice(i, 1);
+  }
+
+  // Dash: an instant forward burst with a fading radial "speed" blur (motionblur.ts).
+  if (down("KeyV")) dash.trigger(player, map);
+  dash.update(dt);
+
+  // Mob death (from either the swing or a fireball): one particle burst, one gem drop.
+  if (mobWasAlive && !mob.alive) {
+    particles.burst(mob.x, mob.y, 0.3, 14, { r: 0.25, g: 0.95, b: 0.35 });
+    game.treasures.push({ x: mob.x, y: mob.y, taken: false });
+  }
+  mobWasAlive = mob.alive;
+  particles.update(dt);
+
+  game.update(player, map, dt);
   if (game.won) winOverlay.style.display = "flex";
   updateHud();
 
@@ -164,14 +278,14 @@ function frame(now: number): void {
   // Sprites draw into whichever buffer the walls just rendered to, using ITS depth buffer,
   // so SSAA smooths their edges like everything else.
   if (settings.ssaa) {
-    raycasterHi.render(player, materials, settings, sway);
-    drawSprites(fbHi, raycasterHi);
-    renderHeldTorch(fbHi, tSec);
+    raycasterHi.render(player, materials, settings, sway, game.doorProgress);
+    drawSprites(fbHi, raycasterHi, tSec);
+    renderHeldTorch(fbHi, tSec, attack.swingT);
     downsampleInto(fbHi, fb, SSAA);
   } else {
-    raycaster.render(player, materials, settings, sway);
-    drawSprites(fb, raycaster);
-    renderHeldTorch(fb, tSec);
+    raycaster.render(player, materials, settings, sway, game.doorProgress);
+    drawSprites(fb, raycaster, tSec);
+    renderHeldTorch(fb, tSec, attack.swingT);
   }
   settings.torch.intensity = baseIntensity;
   if (settings.bloom) {
@@ -180,6 +294,7 @@ function frame(now: number): void {
       strength: settings.bloomStrength,
     });
   }
+  applyRadialBlur(fb, blurScratch, dash.blurAmount());
   fb.present(ctx);
 
   fpsFrames++;

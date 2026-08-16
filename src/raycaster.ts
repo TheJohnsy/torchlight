@@ -80,15 +80,18 @@ export class Raycaster {
   /**
    * `lightOff` displaces the torch light (and shading eye) from the player — the flame
    * sway. Rays still originate at the player; only the shading positions move.
+   * `doorProgress` (roadmap E1.5, GameState.doorProgress) pulses the vault door with an
+   * unlock glow while it's swinging open (0 or 1 = no glow — shut, or already open).
    */
   render(
     player: Player,
     mats: MaterialSet,
     settings: Settings,
     lightOff: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
+    doorProgress = 0,
   ): void {
     this.renderFloorCeiling(player, mats, settings, lightOff);
-    this.renderWalls(player, mats, settings, lightOff);
+    this.renderWalls(player, mats, settings, lightOff, doorProgress);
   }
 
   /**
@@ -168,6 +171,7 @@ export class Raycaster {
     mats: MaterialSet,
     settings: Settings,
     lightOff: { x: number; y: number; z: number },
+    doorProgress: number,
   ): void {
     const { fb, map } = this;
     const w = fb.width;
@@ -263,6 +267,13 @@ export class Raycaster {
       const hitX = px + perpDist * rayDirX;
       const hitY = py + perpDist * rayDirY;
 
+      // Vault-door unlock glow (E1.5): pulses while it's mid-swing, silent once shut (0) or
+      // fully open (1) — |sin| naturally bookends to zero at both ends of doorProgress.
+      const doorGlow =
+        cell === Cell.Door && doorProgress > 0 && doorProgress < 1
+          ? Math.abs(Math.sin(doorProgress * Math.PI * 6)) * 0.6
+          : 0;
+
       for (let y = drawStart; y <= drawEnd; y++) {
         // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0,
         // which also makes v the fragment's world z.
@@ -281,6 +292,11 @@ export class Raycaster {
           hitX, hitY, v,
           lx, ly, lz,
         );
+        if (doorGlow > 0) {
+          shaded.r += doorGlow;
+          shaded.g += doorGlow * 0.7;
+          shaded.b += doorGlow * 0.15;
+        }
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }
     }

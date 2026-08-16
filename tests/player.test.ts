@@ -39,3 +39,24 @@ describe("Player.move", () => {
     expect(p.dirY).toBeCloseTo(1, 10);
   });
 });
+
+describe("Player.knockback", () => {
+  it("displaces the player by the raw vector in open space", () => {
+    const p = new Player(2.5, 2.5, 0);
+    p.knockback(room, 0.3, -0.2);
+    expect(p.x).toBeCloseTo(2.8);
+    expect(p.y).toBeCloseTo(2.3);
+  });
+
+  it("cannot be knocked through a wall", () => {
+    const p = new Player(3.7, 2.5, 0); // wall starts at x=4
+    p.knockback(room, 5, 0); // a huge impulse straight into the wall
+    expect(p.x).toBeLessThanOrEqual(4 - p.radius + 1e-9);
+  });
+
+  it("slides along a wall on a diagonal impulse instead of sticking", () => {
+    const p = new Player(3.7, 2.0, 0); // hugging the east wall
+    p.knockback(room, 1, 1); // blocked on x, open on y
+    expect(p.y).toBeGreaterThan(2.0);
+  });
+});

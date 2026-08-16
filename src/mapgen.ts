@@ -22,6 +22,8 @@ export interface Placements {
   /** Continuous bounds of the locked room: [x0,x1) × [y0,y1) in world units. */
   vault: { x0: number; y0: number; x1: number; y1: number };
   treasures: { x: number; y: number }[];
+  /** The one slime (roadmap E1): spawned in some ordinary room, never the player's own. */
+  mob: { x: number; y: number };
 }
 
 export interface Dungeon {
@@ -192,6 +194,13 @@ function tryGenerate(rng: () => number): Dungeon | null {
     return null;
   }
 
+  // Mob: any ordinary room but the player's own spawn room — nothing should ambush the
+  // player at their own doorstep. Reuses the same floorIn() primitive as key/treasures.
+  const mobCandidates = ordinary.filter((r) => r !== spawnRoom);
+  if (mobCandidates.length === 0) return null;
+  const mob = floorIn(mobCandidates[int(0, mobCandidates.length - 1)]);
+  if (!mob) return null;
+
   // --- validate with flood fill: the guarantees live HERE, not in the carving ----------
   const spawn = tileCenter(sc.cx, sc.cy);
   if (at(sc.cx, sc.cy) !== Cell.Floor) return null; // pillar landed on spawn? (can't, but cheap)
@@ -206,6 +215,7 @@ function tryGenerate(rng: () => number): Dungeon | null {
   for (const t of treasures) {
     if (!open.has(id(t.x, t.y)) && !inVault(t.x - 0.5, t.y - 0.5)) return null;
   }
+  if (!open.has(id(mob.x, mob.y))) return null; // mob must be reachable pre-door too
 
   // Serialize through the ASCII parser so generated maps obey the exact same contract
   // (and failure modes) as the hand-authored one.
@@ -223,6 +233,7 @@ function tryGenerate(rng: () => number): Dungeon | null {
       key,
       vault: { x0: vault.x, y0: vault.y, x1: vault.x + vault.w, y1: vault.y + vault.h },
       treasures,
+      mob,
     },
   };
 }

@@ -57,26 +57,39 @@ deterministic and repeatable, same principle as the seeded noise fields.
 - [x] Input by physical key (`e.code`) — WASD survives non-Latin keyboard layouts
 
 ### Phase E1 — one mob (richest single feature: unlocks 3 slides)
-- [ ] Procedurally-drawn slime/bat sprite (Worley/FBm blobs — no assets, ever)
-- [ ] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides)
-- [ ] Trivial wander-toward-player behavior; touching it just knocks the player back
+- [x] Procedurally-drawn slime sprite (`mobTexel`, `src/sprite.ts`) — FBm-perturbed blob
+      silhouette, the same noise field as the walls, warping a creature outline instead
+- [x] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides) —
+      reuses the existing `renderSprite`/depth-occlusion pipeline built for the key
+- [x] Trivial wander-toward-player behavior; touching it just knocks the player back
+      (`src/mob.ts`)
 
 ### Phase E1.5 — combat loop (makes it a real game, not a walkthrough)
-Combat should feel like a game; each piece still points at a technique on screen:
-- [ ] Attack input (Space / left click): torch swing — the viewmodel plays a keyframed
-      arc (animation lecture), hits what's in reach ahead (uses the depth/projection math)
-- [ ] Mob HP + hit feedback: white hit-flash frame + emissive pulse on damage
-      (game state driving shader parameters — same principle as the boss)
-- [ ] Mob death: brief particle burst (feeds E3's emitter), drops a gem
-- [ ] Player life points: heart icons in the HUD (texel-painted, like gem/key);
-      mob contact costs a heart + knockback; 0 hearts → red-vignette death overlay,
-      R to restart the same seed
-- [ ] One skill: fireball on a cooldown — IS E3's projectile (particles + motion blur),
-      with a HUD cooldown slot; hitting a mob applies damage
-- [ ] Skill #2 (optional): dash/blink — motion-blur streak on the whole frame for a beat
-- [ ] Keyframe + lerp timeline helper: x(t) = lerp(xa, xb, t), ease via smoothstep
-- [ ] Vault door swings open over ~1s instead of popping (keyframed transform)
-- [ ] Mob idle bob + lunge as keyframed motion; key gets a float/spin cycle
+- [x] Attack input (Space): torch swing — the viewmodel plays a keyframed arc
+      (`heldtorch.ts` rotates the tip around the base via `swingT`), hits what's in reach
+      ahead in a facing cone (`src/combat.ts`)
+- [x] Mob HP + hit feedback: white hit-flash frame on damage (`Mob.takeDamage`/`flashing`,
+      `src/mob.ts`) — no separate "emissive pulse" beyond the flash tint itself
+- [x] Mob death: particle burst (`src/particles.ts`, reuses the sprite billboard pipeline
+      instead of a second rendering path) + drops a gem (pushed into `game.treasures`)
+- [x] Player life points: heart icons in the HUD (`heartTexel`, texel-painted like gem/key);
+      mob contact costs a heart + knockback; 0 hearts → red death overlay, R to restart
+      the same seed (`src/game.ts`, `index.html`, `src/main.ts`)
+- [x] One skill: fireball on a cooldown (`src/projectile.ts`) — a ghost-trail streak
+      standing in for per-object motion blur (the raycaster has no velocity buffer to
+      convolve), HUD cooldown slot, hitting the mob applies damage
+- [x] Skill #2 (optional): dash (`src/dash.ts`) — reuses `Player.knockback()`'s
+      collision-checked displacement as a self-inflicted burst, paired with a screen-space
+      radial "speed" blur (`src/motionblur.ts`) that fades out over ~0.2s
+- [x] Keyframe + lerp timeline helper: `src/anim.ts` (`lerp`/`smoothstep`/`progress`),
+      used by the door swing and (via `sin(t·π)`) the torch swing arc
+- [x] Vault door swings open over ~1s (`GameState.doorProgress`) instead of popping —
+      expressed as a timed unlock + pulsing glow (`raycaster.ts`) rather than literal
+      swinging geometry, since wall height is uniform per column with no partial-height
+      hook; the door stays solid and impassable for the full second either way
+- [x] Mob idle bob + lunge as keyframed motion (`Mob.bobOffset()`, lunge speed inside
+      `LUNGE_RANGE`); key gets a float cycle (`keyFloat`) — no literal "spin" for either,
+      since a camera-facing billboard has no visible rotation around its vertical axis
 
 ### Phase E3 — particles + motion blur (combat feel)
 - [ ] Torch spark particles: small noise-driven emitter, emissive, bloom-fed

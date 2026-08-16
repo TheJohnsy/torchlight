@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { LinearFramebuffer } from "../src/framebuffer";
 import { Player } from "../src/player";
-import { gemTexel, keyTexel, projectSprite, renderSprite } from "../src/sprite";
+import {
+  fireTexel,
+  gemTexel,
+  heartTexel,
+  keyFloat,
+  keyTexel,
+  mobTexel,
+  projectSprite,
+  renderSprite,
+} from "../src/sprite";
 import type { Color } from "../src/types";
 
 const scratch: Color = { r: 0, g: 0, b: 0 };
@@ -97,6 +106,81 @@ describe("gemTexel (procedural treasure sprite)", () => {
   it("glows emerald: green leads red", () => {
     gemTexel(0.5, 0.5, scratch);
     expect(scratch.g).toBeGreaterThan(scratch.r);
+  });
+});
+
+describe("mobTexel (procedural slime sprite)", () => {
+  it("is transparent at the texture corners, opaque at the body center", () => {
+    expect(mobTexel(0.02, 0.02, scratch)).toBe(0);
+    expect(mobTexel(0.98, 0.02, scratch)).toBe(0);
+    expect(mobTexel(0.5, 0.5, scratch)).toBe(1);
+  });
+
+  it("is slime green: green leads red, not emissive", () => {
+    mobTexel(0.5, 0.5, scratch);
+    expect(scratch.g).toBeGreaterThan(scratch.r);
+    expect(scratch.g).toBeLessThanOrEqual(1);
+  });
+
+  it("has dark eyes near the top of the body", () => {
+    mobTexel(0.42, 0.42, scratch);
+    const eye = scratch.g;
+    mobTexel(0.5, 0.5, scratch);
+    const body = scratch.g;
+    expect(eye).toBeLessThan(body);
+  });
+});
+
+describe("keyFloat (key's idle bob)", () => {
+  it("oscillates around zero, bounded, deterministic per t", () => {
+    expect(keyFloat(1.23)).toBe(keyFloat(1.23));
+    let max = -Infinity, min = Infinity;
+    for (let t = 0; t < 10; t += 0.1) {
+      const f = keyFloat(t);
+      max = Math.max(max, f);
+      min = Math.min(min, f);
+    }
+    expect(max).toBeGreaterThan(0);
+    expect(min).toBeLessThan(0);
+    expect(Math.abs(max)).toBeLessThan(0.1);
+  });
+});
+
+describe("heartTexel (HUD heart)", () => {
+  it("is transparent at the corners, opaque at the lobes/center", () => {
+    expect(heartTexel(0.02, 0.02, scratch)).toBe(0);
+    expect(heartTexel(0.98, 0.98, scratch)).toBe(0);
+    expect(heartTexel(0.5, 0.6, scratch)).toBeGreaterThan(0);
+  });
+
+  it("is red: red leads green and blue", () => {
+    heartTexel(0.5, 0.6, scratch);
+    expect(scratch.r).toBeGreaterThan(scratch.g);
+    expect(scratch.r).toBeGreaterThan(scratch.b);
+  });
+
+  it("has a dip between the two lobes at the top-center (the heart's notch)", () => {
+    // Top-center, above the triangle and between the lobes, should be empty.
+    expect(heartTexel(0.5, 0.9, scratch)).toBe(0);
+  });
+
+  it("tapers to a point at the bottom", () => {
+    expect(heartTexel(0.5, 0.13, scratch)).toBeGreaterThan(0); // right at the tip
+    expect(heartTexel(0.1, 0.13, scratch)).toBe(0); // off to the side at the same height: empty
+  });
+});
+
+describe("fireTexel (fireball bolt)", () => {
+  it("is a soft circular core, transparent past its radius", () => {
+    expect(fireTexel(0.02, 0.02, scratch)).toBe(0);
+    expect(fireTexel(0.5, 0.5, scratch)).toBeGreaterThan(0);
+  });
+
+  it("is emissive orange-hot: red > 1 and leads green leads blue", () => {
+    fireTexel(0.5, 0.5, scratch);
+    expect(scratch.r).toBeGreaterThan(1);
+    expect(scratch.r).toBeGreaterThan(scratch.g);
+    expect(scratch.g).toBeGreaterThan(scratch.b);
   });
 });
 

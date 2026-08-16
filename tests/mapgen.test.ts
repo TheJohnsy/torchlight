@@ -91,6 +91,19 @@ describe("generateDungeon", () => {
     }
   });
 
+  it("places the mob on a reachable, walkable tile outside the vault", () => {
+    expect(d.map.isWall(d.placements.mob.x, d.placements.mob.y)).toBe(false);
+    const v = d.placements.vault;
+    const inVault =
+      d.placements.mob.x >= v.x0 &&
+      d.placements.mob.x < v.x1 &&
+      d.placements.mob.y >= v.y0 &&
+      d.placements.mob.y < v.y1;
+    expect(inVault).toBe(false);
+    const open = reachable(d.map, d.placements.spawn.x, d.placements.spawn.y);
+    expect(open.has(tileId(d.map, d.placements.mob.x, d.placements.mob.y))).toBe(true);
+  });
+
   it("scatters treasures on walkable tiles, with at least one in the vault", () => {
     expect(d.placements.treasures.length).toBeGreaterThanOrEqual(3);
     const v = d.placements.vault;
