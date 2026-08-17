@@ -142,6 +142,30 @@ describe("Mob combat", () => {
     expect(mob.x).toBeCloseTo(2.5); // didn't keep seeking
   });
 
+  it("honors MobOptions overrides (roadmap E5 boss stats), defaulting when omitted", () => {
+    const plain = new Mob(1.5, 1.5);
+    expect(plain.maxHp).toBe(3);
+    expect(plain.hp).toBe(3);
+
+    const boss = new Mob(1.5, 1.5, { maxHp: 10, radius: 0.4, speed: 0.6 });
+    expect(boss.maxHp).toBe(10);
+    expect(boss.hp).toBe(10);
+    expect(boss.radius).toBe(0.4);
+
+    const player = new Player(5.5, 1.5, 0);
+    const plainStep = (() => {
+      const m = new Mob(1.5, 1.5);
+      m.update(0.1, player, room);
+      return m.x - 1.5;
+    })();
+    const slowStep = (() => {
+      const m = new Mob(1.5, 1.5, { speed: 0.6 });
+      m.update(0.1, player, room);
+      return m.x - 1.5;
+    })();
+    expect(slowStep).toBeLessThan(plainStep); // custom speed actually takes effect
+  });
+
   it("idle bob oscillates around zero without net drift", () => {
     const mob = new Mob(1.5, 1.5);
     const player = new Player(1.5, 1.5, 0); // right on top of it — no seek movement to confound it

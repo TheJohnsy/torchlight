@@ -1,5 +1,5 @@
 import { LinearFramebuffer } from "./framebuffer";
-import { fbm2 } from "./noise";
+import { fbm2, worley2 } from "./noise";
 import { Player } from "./player";
 import { PLANE_HALF } from "./raycaster";
 import type { Color } from "./types";
@@ -183,6 +183,65 @@ export function mobTexel(u: number, v: number, out: Color): number {
   out.g = 0.42 * shade + highlight * 0.4;
   out.b = 0.14 * shade + highlight * 0.3;
   return 1;
+}
+
+/**
+ * Boss slime (roadmap E5 — "distinct shading"): the same billboard blob idea as mobTexel,
+ * scaled up in main.ts's sprite size and reskinned with WORLEY-perturbed cracked plates
+ * instead of the regular slime's smooth FBm wobble — a genuinely different noise family for
+ * the hide, not a recolor. Twin back horns read as "boss" at a glance. Eyes are emissive;
+ * `eyeGlow` is supplied per-frame by makeBossTexel() so bloom picks them up and their
+ * brightness tracks remaining HP (the health-driven emissive pulse).
+ */
+function bossBody(u: number, v: number, out: Color, eyeGlow: number): number {
+  const dx = (u - 0.5) / 0.4;
+  const dy = (v - 0.4) / 0.36;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  // Worley distance around the silhouette angle reads as jagged cracked plates, unlike the
+  // regular slime's smooth FBm wobble (same trick, different noise family — roadmap E4/E5).
+  const w = worley2(Math.cos(angle) * 4 + 71, Math.sin(angle) * 4 + 23);
+  const wobble = Math.min(0.4, w) - 0.2; // roughly [-0.2, 0.2]
+  const inBody = r <= 1 + wobble * 0.5;
+
+  // Horns: two triangular spikes above the body, splayed outward.
+  const hornL = v > 0.68 && v < 0.95 && u < 0.34 - (v - 0.68) * 0.6 && u > 0.14;
+  const hornR = v > 0.68 && v < 0.95 && u > 0.66 + (v - 0.68) * 0.6 && u < 0.86;
+  if (!inBody && !hornL && !hornR) return 0;
+
+  // Eyes: bigger than the regular slime's, glowing hotter as HP drops.
+  const eyeDy = v - 0.4;
+  const leftEye = (u - 0.38) ** 2 / 0.0014 + (eyeDy * eyeDy) / 0.0022;
+  const rightEye = (u - 0.62) ** 2 / 0.0014 + (eyeDy * eyeDy) / 0.0022;
+  if (leftEye <= 1 || rightEye <= 1) {
+    out.r = eyeGlow;
+    out.g = eyeGlow * 0.15;
+    out.b = eyeGlow * 0.1;
+    return 1;
+  }
+  if (hornL || hornR) {
+    out.r = 0.25;
+    out.g = 0.08;
+    out.b = 0.1;
+    return 1;
+  }
+  const shade = 0.45 + 0.55 * (v - 0.05);
+  out.r = 0.35 * shade;
+  out.g = 0.08 * shade;
+  out.b = 0.14 * shade;
+  return 1;
+}
+
+/**
+ * Builds this frame's boss texel: eye glow starts a calm dim red and pulses brighter/faster
+ * as `hpFrac` (Mob.hp / Mob.maxHp) falls toward 0 — a game-state value driving a shading
+ * parameter directly, the "health-driven emissive pulse" roadmap bullet.
+ */
+export function makeBossTexel(hpFrac: number, tSec: number): SpriteTexel {
+  const pulseRate = 2 + (1 - hpFrac) * 10; // calm at full HP, frantic near death
+  const pulse = 0.5 + 0.5 * Math.sin(tSec * pulseRate);
+  const eyeGlow = 1.4 + (1 - hpFrac) * 3 * pulse; // always >1 so it always blooms, hotter when hurt
+  return (u: number, v: number, out: Color): number => bossBody(u, v, out, eyeGlow);
 }
 
 /** The key's idle float — a slow bob, same role as the mob's Mob.bobOffset(). */

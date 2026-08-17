@@ -24,10 +24,33 @@ const SHAKE_MAGNITUDE = 0.05; // world units, at full strength (decays to 0 over
 const BOB_AMPLITUDE = 0.03; // idle up/down bob, world z units
 const BOB_RATE = 3; // radians/sec
 
+/**
+ * Per-instance stat overrides (roadmap E5): the boss is a Mob too, just tougher and slower
+ * to close in — reusing this class instead of forking a parallel "Boss" class means combat,
+ * AI, hit-flash/shake, and the death bookkeeping in main.ts all Just Work for both.
+ */
+export interface MobOptions {
+  speed?: number;
+  lungeSpeed?: number;
+  lungeRange?: number;
+  radius?: number;
+  knockbackDistance?: number;
+  hitCooldown?: number;
+  maxHp?: number;
+  hitKnockbackDistance?: number;
+}
+
 export class Mob {
-  readonly radius = RADIUS;
-  hp = MAX_HP;
+  readonly radius: number;
+  readonly maxHp: number;
+  hp: number;
   alive = true;
+  private readonly speed: number;
+  private readonly lungeSpeed: number;
+  private readonly lungeRange: number;
+  private readonly knockbackDistance: number;
+  private readonly hitCooldown: number;
+  private readonly hitKnockbackDistance: number;
   private cooldown = 0;
   private flashTimer = 0;
   private shakeTimer = 0;
@@ -36,7 +59,18 @@ export class Mob {
   constructor(
     public x: number,
     public y: number,
-  ) {}
+    options: MobOptions = {},
+  ) {
+    this.radius = options.radius ?? RADIUS;
+    this.maxHp = options.maxHp ?? MAX_HP;
+    this.hp = this.maxHp;
+    this.speed = options.speed ?? SPEED;
+    this.lungeSpeed = options.lungeSpeed ?? LUNGE_SPEED;
+    this.lungeRange = options.lungeRange ?? LUNGE_RANGE;
+    this.knockbackDistance = options.knockbackDistance ?? KNOCKBACK_DISTANCE;
+    this.hitCooldown = options.hitCooldown ?? HIT_COOLDOWN;
+    this.hitKnockbackDistance = options.hitKnockbackDistance ?? HIT_KNOCKBACK_DISTANCE;
+  }
 
   get flashing(): boolean {
     return this.flashTimer > 0;
@@ -74,8 +108,8 @@ export class Mob {
     this.shakeTimer = SHAKE_DURATION;
     const d = Math.hypot(awayX, awayY);
     if (map && d > 1e-4) {
-      const nx = this.x + (awayX / d) * HIT_KNOCKBACK_DISTANCE;
-      const ny = this.y + (awayY / d) * HIT_KNOCKBACK_DISTANCE;
+      const nx = this.x + (awayX / d) * this.hitKnockbackDistance;
+      const ny = this.y + (awayY / d) * this.hitKnockbackDistance;
       if (!this.blocked(map, nx, this.y)) this.x = nx;
       if (!this.blocked(map, this.x, ny)) this.y = ny;
     }
@@ -99,7 +133,7 @@ export class Mob {
     if (dist > 1e-4) {
       // Seek: step straight toward the player, sliding along walls axis-by-axis. Close in
       // fast (a "lunge") once within range, ambling the rest of the time.
-      const speed = dist < LUNGE_RANGE ? LUNGE_SPEED : SPEED;
+      const speed = dist < this.lungeRange ? this.lungeSpeed : this.speed;
       const step = Math.min(speed * dt, dist);
       const nx = this.x + (dx / dist) * step;
       const ny = this.y + (dy / dist) * step;
@@ -111,8 +145,12 @@ export class Mob {
     // doesn't re-trigger every frame.
     const touchDist = player.radius + this.radius;
     if (this.cooldown <= 0 && dist > 1e-4 && dist < touchDist) {
-      player.knockback(map, (dx / dist) * KNOCKBACK_DISTANCE, (dy / dist) * KNOCKBACK_DISTANCE);
-      this.cooldown = HIT_COOLDOWN;
+      player.knockback(
+        map,
+        (dx / dist) * this.knockbackDistance,
+        (dy / dist) * this.knockbackDistance,
+      );
+      this.cooldown = this.hitCooldown;
       return true;
     }
     return false;

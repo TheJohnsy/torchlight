@@ -7,6 +7,7 @@ import {
   heartTexel,
   keyFloat,
   keyTexel,
+  makeBossTexel,
   mobTexel,
   projectSprite,
   renderSprite,
@@ -128,6 +129,34 @@ describe("mobTexel (procedural slime sprite)", () => {
     mobTexel(0.5, 0.5, scratch);
     const body = scratch.g;
     expect(eye).toBeLessThan(body);
+  });
+});
+
+describe("makeBossTexel (roadmap E5 boss sprite)", () => {
+  it("is transparent at the texture corners, opaque at the body center", () => {
+    const texel = makeBossTexel(1, 0);
+    expect(texel(0.02, 0.02, scratch)).toBe(0);
+    expect(texel(0.98, 0.02, scratch)).toBe(0);
+    expect(texel(0.5, 0.4, scratch)).toBe(1);
+  });
+
+  it("has emissive glowing eyes, brighter red than the slime's dark eye dots", () => {
+    const texel = makeBossTexel(1, 0);
+    const a = texel(0.38, 0.4, scratch); // left eye center
+    expect(a).toBe(1);
+    expect(scratch.r).toBeGreaterThan(1); // emissive — feeds bloom
+  });
+
+  it("pulses the eye glow brighter as HP fraction drops (health-driven emissive pulse)", () => {
+    const full = makeBossTexel(1, 0);
+    full(0.38, 0.4, scratch);
+    const fullGlow = scratch.r;
+
+    const low = makeBossTexel(0, 0);
+    low(0.38, 0.4, scratch);
+    const lowGlow = scratch.r;
+
+    expect(lowGlow).toBeGreaterThan(fullGlow);
   });
 });
 

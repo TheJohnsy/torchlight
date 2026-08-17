@@ -114,9 +114,22 @@ deterministic and repeatable, same principle as the seeded noise fields.
       the key's room — `Placements.keyRoomBounds` — via the same region-override mechanism)
 
 ### Phase E5 — boss showcase (where every effect stacks)
-- [ ] Big billboard mob guarding the vault key
-- [ ] Health-driven emissive pulse (game state drives a shader parameter)
-- [ ] Concentrate effects: bloom-heavy, particle hits, distinct shading
+- [x] Big billboard mob guarding the vault key: `Mob` gained an optional `MobOptions`
+      constructor override (`src/mob.ts`) instead of a forked class, so combat/AI/hit-flash/
+      death all Just Work for a second, tougher instance — planted in the key's own room
+      (`Placements.boss`, `mapgen.ts`), bigger sprite size, 10 HP, slower but harder-hitting
+- [x] Health-driven emissive pulse: `makeBossTexel(hpFrac, tSec)` (`src/sprite.ts`) drives the
+      boss's eye brightness AND pulse rate directly off `boss.hp / boss.maxHp` — calm dim red
+      at full health, hot and frantic near death — a game-state value feeding a shading
+      parameter every frame, not just a one-shot flash
+- [x] Concentrate effects: emissive eyes feed the existing bloom pass for free (values >1
+      linear); a small particle burst fires on every non-lethal hit, not just the kill
+      (`particles.burst`, `main.ts`); death is a bigger 36-particle burst plus 3 gems, versus
+      the regular slime's 14/1; distinct shading from Worley-perturbed jagged hide + horns
+      (`bossBody`, `src/sprite.ts`) instead of the regular slime's smooth FBm wobble — same
+      "one noise field, many uses" idea, now a fourth/fifth use
+- [x] Melee swing and the fireball generalized to hit either enemy (`TorchAttack.update`,
+      `Fireball.update` now take a `Mob[]` of targets) instead of forking a second combat path
 
 ### Phase E6 — pro tier (only if budget remains)
 - [ ] Cheap SSAO: blur depth buffer − depth, scale/clamp, darken (Advanced deck fake)

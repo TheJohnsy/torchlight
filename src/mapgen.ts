@@ -26,6 +26,8 @@ export interface Placements {
   mob: { x: number; y: number };
   /** The key's room, in tile bounds like `vault` (roadmap E4: the cracked-stone wall band). */
   keyRoomBounds: { x0: number; y0: number; x1: number; y1: number };
+  /** Boss guardian (roadmap E5): planted in the key's own room, distinct from the roaming mob. */
+  boss: { x: number; y: number };
 }
 
 export interface Dungeon {
@@ -203,6 +205,20 @@ function tryGenerate(rng: () => number): Dungeon | null {
   const mob = floorIn(mobCandidates[int(0, mobCandidates.length - 1)]);
   if (!mob) return null;
 
+  // Boss (roadmap E5): a tougher guardian planted in the key's own room, distinct from the
+  // roaming slime — reuses floorIn() same as key/treasures/mob, just scoped to keyRoom and
+  // nudged off the key's exact tile so the two sprites don't render on top of each other.
+  let boss: { x: number; y: number } | null = null;
+  for (let tries = 0; tries < 10; tries++) {
+    const candidate = floorIn(keyRoom);
+    if (candidate && Math.hypot(candidate.x - key.x, candidate.y - key.y) >= 1) {
+      boss = candidate;
+      break;
+    }
+  }
+  if (!boss) boss = floorIn(keyRoom);
+  if (!boss) return null;
+
   // --- validate with flood fill: the guarantees live HERE, not in the carving ----------
   const spawn = tileCenter(sc.cx, sc.cy);
   if (at(sc.cx, sc.cy) !== Cell.Floor) return null; // pillar landed on spawn? (can't, but cheap)
@@ -218,6 +234,7 @@ function tryGenerate(rng: () => number): Dungeon | null {
     if (!open.has(id(t.x, t.y)) && !inVault(t.x - 0.5, t.y - 0.5)) return null;
   }
   if (!open.has(id(mob.x, mob.y))) return null; // mob must be reachable pre-door too
+  if (!open.has(id(boss.x, boss.y))) return null; // boss lives in keyRoom — must be reachable too
 
   // Serialize through the ASCII parser so generated maps obey the exact same contract
   // (and failure modes) as the hand-authored one.
@@ -236,6 +253,7 @@ function tryGenerate(rng: () => number): Dungeon | null {
       vault: { x0: vault.x, y0: vault.y, x1: vault.x + vault.w, y1: vault.y + vault.h },
       treasures,
       mob,
+      boss,
       keyRoomBounds: {
         x0: keyRoom.x,
         y0: keyRoom.y,

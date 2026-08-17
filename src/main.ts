@@ -24,7 +24,16 @@ import { Player } from "./player";
 import { Fireball, FireballLauncher } from "./projectile";
 import { Raycaster, type MaterialSet } from "./raycaster";
 import { BakedSampler } from "./sampler";
-import { fireTexel, gemTexel, heartTexel, keyFloat, keyTexel, mobTexel, renderSprite } from "./sprite";
+import {
+  fireTexel,
+  gemTexel,
+  heartTexel,
+  keyFloat,
+  keyTexel,
+  makeBossTexel,
+  mobTexel,
+  renderSprite,
+} from "./sprite";
 
 // Internal render resolution; the canvas is scaled up by CSS with nearest-neighbour.
 const W = 320;
@@ -87,6 +96,21 @@ const fpsEl = createDebugPanel(panelRoot, settings);
 const game = new GameState(placements);
 const mob = new Mob(placements.mob.x, placements.mob.y);
 let mobWasAlive = true; // edge-detects the kill so the death burst/gem drop fires exactly once
+
+// Boss (roadmap E5): tougher, slower, planted guarding the key's room. Reuses the Mob class
+// via MobOptions instead of forking a parallel type — combat/AI/hit-flash all Just Work.
+const boss = new Mob(placements.boss.x, placements.boss.y, {
+  radius: 0.4,
+  maxHp: 10,
+  speed: 0.6,
+  lungeSpeed: 1.1,
+  lungeRange: 1.8,
+  knockbackDistance: 1.1,
+  hitCooldown: 0.9,
+  hitKnockbackDistance: 0.5, // heavier — doesn't fling around like the regular slime
+});
+let bossWasAlive = true;
+let bossHpPrev = boss.hp; // edge-detects a non-lethal hit, for the per-hit particle burst
 
 // Combat (roadmap E1.5): torch swing, fireball skill, dash, and the particle burst they feed.
 const attack = new TorchAttack();
@@ -197,6 +221,32 @@ function drawSprites(buf: LinearFramebuffer, caster: Raycaster, tSec: number): v
         }),
     });
   }
+  if (boss.alive) {
+    // Same hit-flash override as the regular slime, layered on top of whatever the
+    // health-driven eye-pulse texel (makeBossTexel) is doing that frame.
+    const base = makeBossTexel(boss.hp / boss.maxHp, tSec);
+    const texel = boss.flashing
+      ? (u: number, v: number, out: { r: number; g: number; b: number }): number => {
+          const a = base(u, v, out);
+          if (a > 0) {
+            out.r = 1.5;
+            out.g = 1.5;
+            out.b = 1.5;
+          }
+          return a;
+        }
+      : base;
+    const shake = boss.shakeOffset();
+    sprites.push({
+      x: boss.x,
+      y: boss.y,
+      draw: () =>
+        renderSprite(buf, caster.depth, player, boss.x + shake.x, boss.y + shake.y, texel, {
+          size: 0.85,
+          zCenter: 0.35 + boss.bobOffset(),
+        }),
+    });
+  }
   for (const f of fireballs) {
     const trailLen = f.trail.length;
     f.trail.forEach((p, i) => {
@@ -250,10 +300,12 @@ function frame(now: number): void {
   player.turn(turn * settings.turnSpeed * dt);
   player.move(map, forward * MOVE_SPEED * run, strafe * MOVE_SPEED * run, dt);
   if (mob.update(dt, player, map)) game.damagePlayer();
+  if (boss.update(dt, player, map)) game.damagePlayer();
 
-  // Torch swing: held so a press auto-repeats once the swing/cooldown clears.
+  // Torch swing: held so a press auto-repeats once the swing/cooldown clears. Both enemies
+  // are eligible targets (roadmap E5) — one swing still lands on at most one of them.
   if (down("Space")) attack.trigger();
-  attack.update(dt, player, mob, map);
+  attack.update(dt, player, [mob, boss], map);
 
   // Fireball: cooldown-gated, same auto-repeat-while-held feel as the swing.
   if (down("KeyF")) {
@@ -261,7 +313,7 @@ function frame(now: number): void {
     if (bolt) fireballs.push(bolt);
   }
   launcher.tick(dt);
-  for (const bolt of fireballs) bolt.update(dt, map, mob);
+  for (const bolt of fireballs) bolt.update(dt, map, [mob, boss]);
   for (let i = fireballs.length - 1; i >= 0; i--) {
     if (!fireballs[i].alive) fireballs.splice(i, 1);
   }
@@ -276,6 +328,22 @@ function frame(now: number): void {
     game.treasures.push({ x: mob.x, y: mob.y, taken: false });
   }
   mobWasAlive = mob.alive;
+
+  // Boss hit particles (roadmap E5 "particle hits"): a small burst on every non-lethal hit,
+  // not just the kill, so the fight reads as an ongoing beating rather than one flash.
+  if (boss.alive && boss.hp < bossHpPrev) {
+    particles.burst(boss.x, boss.y, 0.35, 6, { r: 0.9, g: 0.25, b: 0.1 });
+  }
+  bossHpPrev = boss.hp;
+  // Boss death: a bigger, redder burst and richer loot — the showcase payoff for the tougher
+  // fight (roadmap E5 "concentrate effects").
+  if (bossWasAlive && !boss.alive) {
+    particles.burst(boss.x, boss.y, 0.35, 36, { r: 1.2, g: 0.35, b: 0.15 });
+    for (let i = 0; i < 3; i++) {
+      game.treasures.push({ x: boss.x + (i - 1) * 0.2, y: boss.y, taken: false });
+    }
+  }
+  bossWasAlive = boss.alive;
   particles.update(dt);
 
   game.update(player, map, dt);

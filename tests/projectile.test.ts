@@ -18,9 +18,9 @@ describe("Fireball", () => {
     const fb = new Fireball(1.5, 3, 1, 0); // facing +x
     const mob = new Mob(50, 50); // far away, never in play
     const x0 = fb.x;
-    fb.update(0.1, room, mob);
+    fb.update(0.1, room, [mob]);
     const step1 = fb.x - x0;
-    fb.update(0.1, room, mob);
+    fb.update(0.1, room, [mob]);
     const step2 = fb.x - (x0 + step1);
     expect(step1).toBeGreaterThan(0);
     expect(step2).toBeCloseTo(step1, 5);
@@ -30,7 +30,7 @@ describe("Fireball", () => {
   it("dies on hitting a wall", () => {
     const fb = new Fireball(4.5, 3, 1, 0); // wall at x=6
     const mob = new Mob(50, 50);
-    for (let i = 0; i < 20 && fb.alive; i++) fb.update(0.05, room, mob);
+    for (let i = 0; i < 20 && fb.alive; i++) fb.update(0.05, room, [mob]);
     expect(fb.alive).toBe(false);
   });
 
@@ -39,14 +39,14 @@ describe("Fireball", () => {
     const corridor = GridMap.parse(["#".repeat(50), `#${".".repeat(48)}#`, "#".repeat(50)]);
     const fb = new Fireball(1.5, 1.5, 1, 0);
     const mob = new Mob(-50, -50);
-    for (let i = 0; i < 100 && fb.alive; i++) fb.update(0.05, corridor, mob);
+    for (let i = 0; i < 100 && fb.alive; i++) fb.update(0.05, corridor, [mob]);
     expect(fb.alive).toBe(false);
   });
 
   it("damages and kills itself against a mob in its path", () => {
     const fb = new Fireball(1.5, 3, 1, 0);
     const mob = new Mob(2.5, 3); // dead ahead
-    for (let i = 0; i < 20 && fb.alive; i++) fb.update(0.05, room, mob);
+    for (let i = 0; i < 20 && fb.alive; i++) fb.update(0.05, room, [mob]);
     expect(fb.alive).toBe(false);
     expect(mob.hp).toBeLessThan(3);
   });
@@ -55,16 +55,26 @@ describe("Fireball", () => {
     const fb = new Fireball(1.5, 3, 1, 0);
     const mob = new Mob(2.5, 3);
     mob.takeDamage(3); // kill it first
-    for (let i = 0; i < 5; i++) fb.update(0.05, room, mob);
+    for (let i = 0; i < 5; i++) fb.update(0.05, room, [mob]);
     expect(mob.hp).toBe(0); // no further change
   });
 
   it("keeps a bounded trail of its recent positions", () => {
     const fb = new Fireball(1.5, 3, 1, 0);
     const mob = new Mob(50, 50);
-    for (let i = 0; i < 10; i++) fb.update(0.05, room, mob);
+    for (let i = 0; i < 10; i++) fb.update(0.05, room, [mob]);
     expect(fb.trail.length).toBeGreaterThan(0);
     expect(fb.trail.length).toBeLessThanOrEqual(4);
+  });
+
+  it("hits whichever of several targets is in its path and leaves the rest untouched", () => {
+    const fb = new Fireball(1.5, 3, 1, 0);
+    const near = new Mob(50, 50); // decoy, never in the bolt's path
+    const inPath = new Mob(2.5, 3); // dead ahead
+    for (let i = 0; i < 20 && fb.alive; i++) fb.update(0.05, room, [near, inPath]);
+    expect(fb.alive).toBe(false);
+    expect(inPath.hp).toBeLessThan(inPath.maxHp);
+    expect(near.hp).toBe(near.maxHp);
   });
 });
 

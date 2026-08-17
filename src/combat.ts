@@ -32,27 +32,40 @@ export class TorchAttack {
     this.hitThisSwing = false;
   }
 
-  /** Advances the swing clock and lands damage once, in the window where the arc connects. */
-  update(dt: number, player: Player, mob: Mob, map?: GridMap): void {
+  /**
+   * Advances the swing clock and lands damage once, in the window where the arc connects.
+   * `targets` lets the boss (roadmap E5) and the regular slime coexist under one melee swing.
+   * Picks the CLOSEST target in reach+cone, not the first in array order — with a roaming
+   * slime that constantly seeks the player, "first in the array" would let it wander between
+   * the player and the boss and silently soak every swing meant for the boss instead.
+   */
+  update(dt: number, player: Player, targets: Mob[], map?: GridMap): void {
     if (this.cooldown > 0) this.cooldown -= dt;
     if (!this.swinging) return;
 
     this.swingT += dt / SWING_DURATION;
-    if (
-      !this.hitThisSwing &&
-      this.swingT >= HIT_WINDOW_START &&
-      this.swingT <= HIT_WINDOW_END &&
-      mob.alive
-    ) {
-      const dx = mob.x - player.x;
-      const dy = mob.y - player.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 1e-4 && dist < ATTACK_REACH) {
+    if (!this.hitThisSwing && this.swingT >= HIT_WINDOW_START && this.swingT <= HIT_WINDOW_END) {
+      let best: Mob | null = null;
+      let bestDist = Infinity;
+      let bestDx = 0;
+      let bestDy = 0;
+      for (const mob of targets) {
+        if (!mob.alive) continue;
+        const dx = mob.x - player.x;
+        const dy = mob.y - player.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= 1e-4 || dist >= ATTACK_REACH || dist >= bestDist) continue;
         const dot = (dx / dist) * player.dirX + (dy / dist) * player.dirY;
         if (dot > Math.cos(ATTACK_HALF_ANGLE)) {
-          mob.takeDamage(ATTACK_DAMAGE, map, dx, dy); // knocked further along the swing's line
-          this.hitThisSwing = true;
+          best = mob;
+          bestDist = dist;
+          bestDx = dx;
+          bestDy = dy;
         }
+      }
+      if (best) {
+        best.takeDamage(ATTACK_DAMAGE, map, bestDx, bestDy); // knocked further along the swing's line
+        this.hitThisSwing = true;
       }
     }
     if (this.swingT >= 1) {

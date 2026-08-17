@@ -114,6 +114,18 @@ describe("generateDungeon", () => {
     expect(open.has(tileId(d.map, d.placements.mob.x, d.placements.mob.y))).toBe(true);
   });
 
+  it("places the boss inside the key's own room, reachable and off the key's exact tile", () => {
+    const { boss, key, keyRoomBounds } = d.placements;
+    expect(d.map.isWall(boss.x, boss.y)).toBe(false);
+    expect(boss.x).toBeGreaterThanOrEqual(keyRoomBounds.x0);
+    expect(boss.x).toBeLessThanOrEqual(keyRoomBounds.x1);
+    expect(boss.y).toBeGreaterThanOrEqual(keyRoomBounds.y0);
+    expect(boss.y).toBeLessThanOrEqual(keyRoomBounds.y1);
+    expect(Math.hypot(boss.x - key.x, boss.y - key.y)).toBeGreaterThan(0);
+    const open = reachable(d.map, d.placements.spawn.x, d.placements.spawn.y);
+    expect(open.has(tileId(d.map, boss.x, boss.y))).toBe(true);
+  });
+
   it("scatters treasures on walkable tiles, with at least one in the vault", () => {
     expect(d.placements.treasures.length).toBeGreaterThanOrEqual(3);
     const v = d.placements.vault;

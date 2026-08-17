@@ -30,7 +30,8 @@ export class Fireball {
     this.vy = dirY * SPEED;
   }
 
-  update(dt: number, map: GridMap, mob: Mob): void {
+  /** `targets` lets one bolt threaten both the regular slime and the boss (roadmap E5). */
+  update(dt: number, map: GridMap, targets: Mob[]): void {
     if (!this.alive) return;
 
     this.trail.unshift({ x: this.x, y: this.y });
@@ -44,11 +45,13 @@ export class Fireball {
       this.alive = false;
       return;
     }
-    if (mob.alive) {
+    for (const mob of targets) {
+      if (!mob.alive) continue;
       const dist = Math.hypot(mob.x - this.x, mob.y - this.y);
       if (dist < mob.radius + RADIUS) {
         mob.takeDamage(DAMAGE, map, this.vx, this.vy); // punched further along the bolt's flight
         this.alive = false;
+        break;
       }
     }
   }
