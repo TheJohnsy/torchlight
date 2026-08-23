@@ -19,6 +19,7 @@ import { Mob } from "./mob";
 import { applyRadialBlur } from "./motionblur";
 import { linearToByte } from "./framebuffer";
 import { renderHeldTorch, torchFlicker, torchSway } from "./heldtorch";
+import { drawMinimap, MINIMAP_CELL_PX, type MinimapMarker } from "./minimap";
 import { ParticleSystem } from "./particles";
 import { Player } from "./player";
 import { Fireball, FireballLauncher } from "./projectile";
@@ -60,6 +61,16 @@ const { map, placements } = generateDungeon(seed);
 const player = new Player(placements.spawn.x, placements.spawn.y, 0);
 const raycaster = new Raycaster(fb, map);
 const raycasterHi = new Raycaster(fbHi, map);
+
+// Minimap (roadmap E6): sized from the actual generated map, not hardcoded — stays correct
+// if mapgen's WIDTH/HEIGHT ever change. CSS then scales the native buffer 2× for legibility,
+// same "native-res, CSS-scaled-up crisp" pattern as #view.
+const minimapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
+minimapCanvas.width = map.width * MINIMAP_CELL_PX;
+minimapCanvas.height = map.height * MINIMAP_CELL_PX;
+minimapCanvas.style.width = `${minimapCanvas.width * 2}px`;
+minimapCanvas.style.height = `${minimapCanvas.height * 2}px`;
+const minimapCtx = minimapCanvas.getContext("2d")!;
 
 // Bake every procedural material once at startup (~a second of FBm; then the loop is free).
 const materials: MaterialSet = {
@@ -349,6 +360,12 @@ function frame(now: number): void {
   game.update(player, map, dt);
   if (game.won) winOverlay.style.display = "flex";
   updateHud();
+
+  const markers: MinimapMarker[] = [];
+  if (!game.hasKey) markers.push({ x: placements.key.x, y: placements.key.y, color: "#e8b56a" });
+  if (mob.alive) markers.push({ x: mob.x, y: mob.y, color: "#3fbf5a" });
+  if (boss.alive) markers.push({ x: boss.x, y: boss.y, color: "#d64b3a" });
+  drawMinimap(minimapCtx, map, player, markers);
 
   // The flame's breathing modulates the real point light (intensity), and its sway MOVES
   // the light around the player — that position wander is what makes the shading dance on

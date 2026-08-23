@@ -21,6 +21,10 @@
   <div id="stage">
     <div style="position: relative;">
       <canvas id="view" width="320" height="200"></canvas>
+      <!-- Top-down minimap (roadmap E6): the 2D grid the raycaster projects from, made
+           visible next to the 3D view. Sized at runtime in main.ts from the actual map
+           dimensions; drawn as flat 2D canvas UI, not part of the lit framebuffer pipeline. -->
+      <canvas id="minimap" style="position: absolute; top: 8px; right: 8px; image-rendering: pixelated; background: rgba(10, 8, 4, 0.55); border: 1px solid rgba(232, 181, 106, 0.3); border-radius: 4px;"></canvas>
       <!-- In-game HUD, classic corner-overlay style: translucent plate so the scene
            reads through it; icons are painted at runtime from the sprite texel code. -->
       <div id="hud" style="position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 16px; padding: 7px 12px; background: rgba(10, 8, 4, 0.5); border: 1px solid rgba(232, 181, 106, 0.3); border-radius: 4px; color: #e8b56a; font-size: 17px; user-select: none; pointer-events: none;">

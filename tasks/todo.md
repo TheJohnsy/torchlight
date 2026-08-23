@@ -134,6 +134,13 @@ deterministic and repeatable, same principle as the seeded noise fields.
 ### Phase E6 — pro tier (only if budget remains)
 - [ ] Cheap SSAO: blur depth buffer − depth, scale/clamp, darken (Advanced deck fake)
 - [ ] Shadows: 1D shadow map from the torch, or blob shadows under mobs (shadow-map slides)
-- [ ] Minimap: top-down grid beside the first-person view — the 2D→projection
-      relationship made literally visible for the grader
+- [x] Minimap: top-down grid beside the first-person view — the 2D→projection relationship
+      made literally visible for the grader (`src/minimap.ts`, wired into `main.ts`, canvas
+      added in `index.html`). Drawn straight to a real 2D canvas context, deliberately
+      outside the linear-light framebuffer pipeline — same convention as the HUD icon
+      painter (`paintIcon`), since it's flat UI, not a lit part of the 3D scene. Shows the
+      whole generated map always (no fog-of-war/exploration reveal — that's a roguelike
+      mechanic with no lecture technique behind it, out of scope); marks the key (while
+      uncollected), the regular mob, and the boss (while alive), plus a rotating triangle
+      for the player's position/facing
 - [ ] Lava pit hazard: metaballs/marching squares over a thresholded noise field
