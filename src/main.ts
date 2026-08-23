@@ -101,13 +101,13 @@ let mobWasAlive = true; // edge-detects the kill so the death burst/gem drop fir
 // via MobOptions instead of forking a parallel type — combat/AI/hit-flash all Just Work.
 const boss = new Mob(placements.boss.x, placements.boss.y, {
   radius: 0.4,
-  maxHp: 10,
+  maxHp: 6, // tuned down from 10 — was outlasting the player's 3 hearts
   speed: 0.6,
   lungeSpeed: 1.1,
   lungeRange: 1.8,
   knockbackDistance: 1.1,
-  hitCooldown: 0.9,
-  hitKnockbackDistance: 0.5, // heavier — doesn't fling around like the regular slime
+  hitCooldown: 1.3, // tuned up from 0.9 — more breathing room between its own hits
+  hitKnockbackDistance: 1.0, // tuned up from 0.5 — punched back a real distance on a landed swing
 });
 let bossWasAlive = true;
 let bossHpPrev = boss.hp; // edge-detects a non-lethal hit, for the per-hit particle burst
