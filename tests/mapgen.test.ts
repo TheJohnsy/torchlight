@@ -91,6 +91,41 @@ describe("generateDungeon", () => {
     }
   });
 
+  it("reports keyRoomBounds as a real room rect containing the key tile", () => {
+    const { keyRoomBounds, key } = d.placements;
+    expect(keyRoomBounds.x1).toBeGreaterThan(keyRoomBounds.x0);
+    expect(keyRoomBounds.y1).toBeGreaterThan(keyRoomBounds.y0);
+    expect(key.x).toBeGreaterThanOrEqual(keyRoomBounds.x0);
+    expect(key.x).toBeLessThanOrEqual(keyRoomBounds.x1);
+    expect(key.y).toBeGreaterThanOrEqual(keyRoomBounds.y0);
+    expect(key.y).toBeLessThanOrEqual(keyRoomBounds.y1);
+  });
+
+  it("places the mob on a reachable, walkable tile outside the vault", () => {
+    expect(d.map.isWall(d.placements.mob.x, d.placements.mob.y)).toBe(false);
+    const v = d.placements.vault;
+    const inVault =
+      d.placements.mob.x >= v.x0 &&
+      d.placements.mob.x < v.x1 &&
+      d.placements.mob.y >= v.y0 &&
+      d.placements.mob.y < v.y1;
+    expect(inVault).toBe(false);
+    const open = reachable(d.map, d.placements.spawn.x, d.placements.spawn.y);
+    expect(open.has(tileId(d.map, d.placements.mob.x, d.placements.mob.y))).toBe(true);
+  });
+
+  it("places the boss inside the key's own room, reachable and off the key's exact tile", () => {
+    const { boss, key, keyRoomBounds } = d.placements;
+    expect(d.map.isWall(boss.x, boss.y)).toBe(false);
+    expect(boss.x).toBeGreaterThanOrEqual(keyRoomBounds.x0);
+    expect(boss.x).toBeLessThanOrEqual(keyRoomBounds.x1);
+    expect(boss.y).toBeGreaterThanOrEqual(keyRoomBounds.y0);
+    expect(boss.y).toBeLessThanOrEqual(keyRoomBounds.y1);
+    expect(Math.hypot(boss.x - key.x, boss.y - key.y)).toBeGreaterThan(0);
+    const open = reachable(d.map, d.placements.spawn.x, d.placements.spawn.y);
+    expect(open.has(tileId(d.map, boss.x, boss.y))).toBe(true);
+  });
+
   it("scatters treasures on walkable tiles, with at least one in the vault", () => {
     expect(d.placements.treasures.length).toBeGreaterThanOrEqual(3);
     const v = d.placements.vault;

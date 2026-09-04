@@ -91,6 +91,29 @@ describe("renderHeldTorch (first-person viewmodel)", () => {
     expect(differs).toBe(true); // the flame moves
   });
 
+  it("mid-swing (swingT) visibly displaces the torch from its rest frame", () => {
+    const rest = new LinearFramebuffer(W, H);
+    const mid = new LinearFramebuffer(W, H);
+    renderHeldTorch(rest, 0.5); // swingT defaults to -1 (idle)
+    renderHeldTorch(mid, 0.5, 0.5); // mid-arc
+    let differs = false;
+    for (let i = 0; i < rest.data.length && !differs; i++) {
+      if (Math.abs(rest.data[i] - mid.data[i]) > 0.01) differs = true;
+    }
+    expect(differs).toBe(true);
+  });
+
+  it("the swing returns to the rest pose at swingT 0 and 1 (arc starts and ends at rest)", () => {
+    const rest = new LinearFramebuffer(W, H);
+    const start = new LinearFramebuffer(W, H);
+    const end = new LinearFramebuffer(W, H);
+    renderHeldTorch(rest, 0.5);
+    renderHeldTorch(start, 0.5, 0);
+    renderHeldTorch(end, 0.5, 1);
+    expect(Array.from(start.data)).toEqual(Array.from(rest.data));
+    expect(Array.from(end.data)).toEqual(Array.from(rest.data));
+  });
+
   it("scales with the framebuffer (SSAA buffer gets a proportional torch)", () => {
     const lo = new LinearFramebuffer(W, H);
     const hi = new LinearFramebuffer(W * 2, H * 2);

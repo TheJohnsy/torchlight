@@ -9,11 +9,26 @@ import type { Color, Normal } from "./types";
 /** Half-width of the camera plane = tan(FOV/2); 0.66 ≈ 66° horizontal FOV. */
 export const PLANE_HALF = 0.66;
 
-/** Which sampler covers which surface. */
+/** A continuous-coordinate rectangle: [x0,x1) × [y0,y1), same shape as Placements.vault. */
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Which sampler covers which surface. `vaultFloor`/`crackedStone` (roadmap E4) are
+ * REGION overrides rather than per-Cell ones: the raycaster checks world position against
+ * `bounds` instead of the grid's Cell type, so one room's floor or one wall band can get a
+ * different material without adding a new Cell value (Cell stays purely about collision).
+ */
 export interface MaterialSet {
   walls: Map<Cell, BakedSampler>;
   floor: BakedSampler;
   ceiling: BakedSampler;
+  vaultFloor?: { sampler: BakedSampler; bounds: Rect };
+  crackedStone?: { sampler: BakedSampler; bounds: Rect };
 }
 
 /** Eye (and torch) height above the floor, in wall units. */
@@ -80,15 +95,18 @@ export class Raycaster {
   /**
    * `lightOff` displaces the torch light (and shading eye) from the player — the flame
    * sway. Rays still originate at the player; only the shading positions move.
+   * `doorProgress` (roadmap E1.5, GameState.doorProgress) pulses the vault door with an
+   * unlock glow while it's swinging open (0 or 1 = no glow — shut, or already open).
    */
   render(
     player: Player,
     mats: MaterialSet,
     settings: Settings,
     lightOff: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
+    doorProgress = 0,
   ): void {
     this.renderFloorCeiling(player, mats, settings, lightOff);
-    this.renderWalls(player, mats, settings, lightOff);
+    this.renderWalls(player, mats, settings, lightOff, doorProgress);
   }
 
   /**
@@ -136,9 +154,15 @@ export class Raycaster {
         const u = fx - Math.floor(fx);
         const v = fy - Math.floor(fy);
 
-        // Floor: tangent frame coincides with world axes (u→+x, v→+y, out→+z).
-        mats.floor.albedoAt(u, v, albedo, settings.bilinear);
-        mats.floor.normalAt(u, v, tsNormal);
+        // Floor: tangent frame coincides with world axes (u→+x, v→+y, out→+z). A region
+        // override (e.g. marble in the vault) swaps the sampler by world position, not Cell.
+        const vf = mats.vaultFloor;
+        const floorSampler =
+          vf && fx >= vf.bounds.x0 && fx < vf.bounds.x1 && fy >= vf.bounds.y0 && fy < vf.bounds.y1
+            ? vf.sampler
+            : mats.floor;
+        floorSampler.albedoAt(u, v, albedo, settings.bilinear);
+        floorSampler.normalAt(u, v, tsNormal);
         shadeFragment(
           settings,
           albedo.r, albedo.g, albedo.b,
@@ -168,6 +192,7 @@ export class Raycaster {
     mats: MaterialSet,
     settings: Settings,
     lightOff: { x: number; y: number; z: number },
+    doorProgress: number,
   ): void {
     const { fb, map } = this;
     const w = fb.width;
@@ -251,7 +276,15 @@ export class Raycaster {
       const flipU = (side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0);
       const u = flipU ? 1 - wallX : wallX;
 
-      const sampler = mats.walls.get(cell) ?? mats.walls.get(Cell.Stone)!;
+      // Region override (e.g. a cracked-stone room band): only ever replaces plain Stone,
+      // by the hit cell's integer coordinates rather than its Cell type.
+      const cz = mats.crackedStone;
+      const sampler =
+        cell === Cell.Stone &&
+        cz &&
+        mapX >= cz.bounds.x0 && mapX < cz.bounds.x1 && mapY >= cz.bounds.y0 && mapY < cz.bounds.y1
+          ? cz.sampler
+          : (mats.walls.get(cell) ?? mats.walls.get(Cell.Stone)!);
 
       // --- tangent frame of this wall face (the "critical agreement" of spec §4) --------
       // Outward face normal points back toward the ray; tangent points along increasing u.
@@ -262,6 +295,13 @@ export class Raycaster {
       // World position of the hit (perpDist is exactly the ray parameter t — see above).
       const hitX = px + perpDist * rayDirX;
       const hitY = py + perpDist * rayDirY;
+
+      // Vault-door unlock glow (E1.5): pulses while it's mid-swing, silent once shut (0) or
+      // fully open (1) — |sin| naturally bookends to zero at both ends of doorProgress.
+      const doorGlow =
+        cell === Cell.Door && doorProgress > 0 && doorProgress < 1
+          ? Math.abs(Math.sin(doorProgress * Math.PI * 6)) * 0.6
+          : 0;
 
       for (let y = drawStart; y <= drawEnd; y++) {
         // v runs UP the wall (tile convention, types.ts): bottom of the slice is v=0,
@@ -281,6 +321,11 @@ export class Raycaster {
           hitX, hitY, v,
           lx, ly, lz,
         );
+        if (doorGlow > 0) {
+          shaded.r += doorGlow;
+          shaded.g += doorGlow * 0.7;
+          shaded.b += doorGlow * 0.15;
+        }
         fb.setPixel(x, y, shaded.r, shaded.g, shaded.b);
       }
     }

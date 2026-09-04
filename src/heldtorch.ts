@@ -1,3 +1,4 @@
+import { clamp01 } from "./anim";
 import { LinearFramebuffer } from "./framebuffer";
 import { fbm2 } from "./noise";
 
@@ -16,6 +17,8 @@ const BX = 0.44, BY = 0.38;
 const HANDLE_HALF = 0.026;
 const FLAME_H = 0.26; // flame height above the tip
 const FLAME_W = 0.042;
+/** Torch-swing arc (roadmap E1.5): the tip's max rotation away from rest, in radians. */
+const SWING_AMPLITUDE = 0.55;
 
 /**
  * The torch's breathing, in [0.72, 1.14]: multiplies BOTH the flame's height and the
@@ -40,25 +43,44 @@ export function torchSway(t: number): { x: number; y: number; z: number } {
   };
 }
 
-/** Distance from point to the handle segment + the segment parameter t01 of the foot. */
-function segDist(u: number, v: number): { d: number; t01: number } {
-  const dx = BX - AX;
-  const dy = BY - AY;
+/** Distance from point to the handle segment (A→[bx,by]) + the segment parameter t01. */
+function segDist(u: number, v: number, bx: number, by: number): { d: number; t01: number } {
+  const dx = bx - AX;
+  const dy = by - AY;
   const t01 = Math.max(0, Math.min(1, ((u - AX) * dx + (v - AY) * dy) / (dx * dx + dy * dy)));
   const px = AX + dx * t01;
   const py = AY + dy * t01;
   return { d: Math.hypot(u - px, v - py), t01 };
 }
 
-export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
+/**
+ * `swingT` is the same 0..1 (or -1 = idle) timeline TorchAttack drives (combat.ts): a
+ * keyframed melee swing, not a separate clock owned by this module. `sin(t·π)` arcs the
+ * tip away from rest and back with zero velocity at both ends, no separate ease needed.
+ */
+export function renderHeldTorch(fb: LinearFramebuffer, t: number, swingT = -1): void {
   const w = fb.width;
   const h = fb.height;
-  // Bounding region of everything we might touch, clipped to the frame.
-  const x0 = Math.max(0, Math.floor(w - 1 - 0.6 * h));
+  // Bounding region of everything we might touch, clipped to the frame. Wide enough to
+  // cover the swing's max reach (SWING_AMPLITUDE rotates the tip well past its rest u) —
+  // sized too tight here is what clipped the torch head off mid-swing.
+  const x0 = Math.max(0, Math.floor(w - 1 - 0.72 * h));
   const y0 = Math.max(0, Math.floor(h - 1 - 0.78 * h));
 
   // Whole-flame breathing — the same stream that drives the room light in main.ts.
   const breathe = torchFlicker(t);
+
+  // Swing: rotate the tip around the base (A). The base stays anchored near the hand;
+  // the head — and the flame riding on it — arcs through the hit. Negated: u increases
+  // LEFTWARD (toward screen center), so the un-negated angle swept the tip inward toward
+  // the body/corner instead of outward across the view — the opposite of a forward chop.
+  const swingAngle = swingT >= 0 ? -Math.sin(clamp01(swingT) * Math.PI) * SWING_AMPLITUDE : 0;
+  const cosA = Math.cos(swingAngle);
+  const sinA = Math.sin(swingAngle);
+  const dx0 = BX - AX;
+  const dy0 = BY - AY;
+  const bx = AX + dx0 * cosA - dy0 * sinA;
+  const by = AY + dx0 * sinA + dy0 * cosA;
 
   for (let y = y0; y < h; y++) {
     const v = (h - 1 - y) / h;
@@ -72,11 +94,11 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
       // The flame starts BELOW the collar top (h01 < 0) and ramps in, so it visibly wells
       // up out of the iron collar instead of being stacked on top of it — that ramp +
       // the base width matching the collar is what fixes the seam.
-      const h01 = (v - BY) / (FLAME_H * breathe);
+      const h01 = (v - by) / (FLAME_H * breathe);
       if (h01 >= -0.1 && h01 <= 1.15) {
         // Axis sways more toward the tip; the base stays pinned to the torch head.
         const wobble = (fbm2(h01 * 2.6 + 5.2, t * 2.2, 3) - 0.5) * 0.13 * Math.max(0, h01);
-        const du = u - (BX + wobble);
+        const du = u - (bx + wobble);
         // Real-flame width profile: collar-narrow at the base, widest around 30% up,
         // tapering toward the tip — never to zero, the tip is torn off by noise, not
         // pinched by geometry (a geometric pinch is what read as a cartoon droplet).
@@ -103,8 +125,8 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
       }
 
       // --- ember: the wick glows where flame meets collar, even between tongues ---------
-      const eu = u - BX;
-      const ev = v - (BY + 0.01);
+      const eu = u - bx;
+      const ev = v - (by + 0.01);
       const e2 = eu * eu + ev * ev;
       if (e2 < 0.018 * 0.018) {
         const g = 1 - Math.sqrt(e2) / 0.018;
@@ -113,7 +135,7 @@ export function renderHeldTorch(fb: LinearFramebuffer, t: number): void {
       }
 
       // --- handle ------------------------------------------------------------------------
-      const { d, t01 } = segDist(u, v);
+      const { d, t01 } = segDist(u, v, bx, by);
       if (d > HANDLE_HALF) continue;
       // Rounded shaft shading: full at the axis, falling toward the silhouette edge.
       const round = Math.sqrt(Math.max(0, 1 - (d / HANDLE_HALF) * (d / HANDLE_HALF)));

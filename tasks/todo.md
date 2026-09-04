@@ -57,44 +57,90 @@ deterministic and repeatable, same principle as the seeded noise fields.
 - [x] Input by physical key (`e.code`) — WASD survives non-Latin keyboard layouts
 
 ### Phase E1 — one mob (richest single feature: unlocks 3 slides)
-- [ ] Procedurally-drawn slime/bat sprite (Worley/FBm blobs — no assets, ever)
-- [ ] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides)
-- [ ] Trivial wander-toward-player behavior; touching it just knocks the player back
+- [x] Procedurally-drawn slime sprite (`mobTexel`, `src/sprite.ts`) — FBm-perturbed blob
+      silhouette, the same noise field as the walls, warping a creature outline instead
+- [x] Billboarded, depth-tested against walls per column (Z-buffer, transparency slides) —
+      reuses the existing `renderSprite`/depth-occlusion pipeline built for the key
+- [x] Trivial wander-toward-player behavior; touching it just knocks the player back
+      (`src/mob.ts`)
 
 ### Phase E1.5 — combat loop (makes it a real game, not a walkthrough)
-Combat should feel like a game; each piece still points at a technique on screen:
-- [ ] Attack input (Space / left click): torch swing — the viewmodel plays a keyframed
-      arc (animation lecture), hits what's in reach ahead (uses the depth/projection math)
-- [ ] Mob HP + hit feedback: white hit-flash frame + emissive pulse on damage
-      (game state driving shader parameters — same principle as the boss)
-- [ ] Mob death: brief particle burst (feeds E3's emitter), drops a gem
-- [ ] Player life points: heart icons in the HUD (texel-painted, like gem/key);
-      mob contact costs a heart + knockback; 0 hearts → red-vignette death overlay,
-      R to restart the same seed
-- [ ] One skill: fireball on a cooldown — IS E3's projectile (particles + motion blur),
-      with a HUD cooldown slot; hitting a mob applies damage
-- [ ] Skill #2 (optional): dash/blink — motion-blur streak on the whole frame for a beat
-- [ ] Keyframe + lerp timeline helper: x(t) = lerp(xa, xb, t), ease via smoothstep
-- [ ] Vault door swings open over ~1s instead of popping (keyframed transform)
-- [ ] Mob idle bob + lunge as keyframed motion; key gets a float/spin cycle
+- [x] Attack input (Space): torch swing — the viewmodel plays a keyframed arc
+      (`heldtorch.ts` rotates the tip around the base via `swingT`), hits what's in reach
+      ahead in a facing cone (`src/combat.ts`)
+- [x] Mob HP + hit feedback: white hit-flash frame on damage (`Mob.takeDamage`/`flashing`,
+      `src/mob.ts`) — no separate "emissive pulse" beyond the flash tint itself
+- [x] Mob death: particle burst (`src/particles.ts`, reuses the sprite billboard pipeline
+      instead of a second rendering path) + drops a gem (pushed into `game.treasures`)
+- [x] Player life points: heart icons in the HUD (`heartTexel`, texel-painted like gem/key);
+      mob contact costs a heart + knockback; 0 hearts → red death overlay, R to restart
+      the same seed (`src/game.ts`, `index.html`, `src/main.ts`)
+- [x] One skill: fireball on a cooldown (`src/projectile.ts`) — a ghost-trail streak
+      standing in for per-object motion blur (the raycaster has no velocity buffer to
+      convolve), HUD cooldown slot, hitting the mob applies damage
+- [x] Skill #2 (optional): dash (`src/dash.ts`) — reuses `Player.knockback()`'s
+      collision-checked displacement as a self-inflicted burst, paired with a screen-space
+      radial "speed" blur (`src/motionblur.ts`) that fades out over ~0.2s
+- [x] Keyframe + lerp timeline helper: `src/anim.ts` (`lerp`/`smoothstep`/`progress`),
+      used by the door swing and (via `sin(t·π)`) the torch swing arc
+- [x] Vault door swings open over ~1s (`GameState.doorProgress`) instead of popping —
+      expressed as a timed unlock + pulsing glow (`raycaster.ts`) rather than literal
+      swinging geometry, since wall height is uniform per column with no partial-height
+      hook; the door stays solid and impassable for the full second either way
+- [x] Mob idle bob + lunge as keyframed motion (`Mob.bobOffset()`, lunge speed inside
+      `LUNGE_RANGE`); key gets a float cycle (`keyFloat`) — no literal "spin" for either,
+      since a camera-facing billboard has no visible rotation around its vertical axis
 
 ### Phase E3 — particles + motion blur (combat feel)
-- [ ] Torch spark particles: small noise-driven emitter, emissive, bloom-fed
-- [ ] One projectile (magic bolt) with a streak — motion-blur kernel from the slides
+- [~] Torch spark particles: tried, cut. The held torch is a screen-space viewmodel
+      overlay (`heldtorch.ts`) with no real world (x,y) — it isn't actually "at" any world
+      position, so world-space particles can never track it, and anything spawned close
+      enough to read as "near the torch" is close enough to the camera to blow up huge
+      under the perspective divide (near-plane blowup, not a tunable bug). Not worth
+      fighting the renderer's own screen-space/world-space split for a checklist bullet —
+      the mob-death burst below already demonstrates the same emitter technique, just at a
+      real world distance where it actually works.
+- [x] One projectile (magic bolt) with a streak — the fireball skill (`src/projectile.ts`),
+      already built for E1.5; its "streak" is a fading ghost-trail of past positions rather
+      than a screen-space motion-blur kernel, since the raycaster has no velocity buffer to
+      convolve. The dash skill's radial blur (`src/motionblur.ts`) is the actual
+      motion-blur-kernel technique from the slides, applied to camera surge instead
 
 ### Phase E4 — material variety (near-zero cost; noise lib exists)
-- [ ] Worley noise added to `noise.ts` (it's in the Textures deck)
-- [ ] Marble: marble(x) = f(sin(x + turbulence)) — vault interior floor
-- [ ] Cracked/Worley stone variant for one room band
+- [x] Worley noise added to `noise.ts` (`worley2`, tileable F1 cellular noise)
+- [x] Marble: marble(x) = f(sin(x + turbulence)) — vault interior floor (`MarbleMaterial`,
+      applied as a region override by world position by `raycaster.ts`, not a new Cell type)
+- [x] Cracked/Worley stone variant for one room band (`CrackedStoneMaterial`, applied to
+      the key's room — `Placements.keyRoomBounds` — via the same region-override mechanism)
 
 ### Phase E5 — boss showcase (where every effect stacks)
-- [ ] Big billboard mob guarding the vault key
-- [ ] Health-driven emissive pulse (game state drives a shader parameter)
-- [ ] Concentrate effects: bloom-heavy, particle hits, distinct shading
+- [x] Big billboard mob guarding the vault key: `Mob` gained an optional `MobOptions`
+      constructor override (`src/mob.ts`) instead of a forked class, so combat/AI/hit-flash/
+      death all Just Work for a second, tougher instance — planted in the key's own room
+      (`Placements.boss`, `mapgen.ts`), bigger sprite size, 10 HP, slower but harder-hitting
+- [x] Health-driven emissive pulse: `makeBossTexel(hpFrac, tSec)` (`src/sprite.ts`) drives the
+      boss's eye brightness AND pulse rate directly off `boss.hp / boss.maxHp` — calm dim red
+      at full health, hot and frantic near death — a game-state value feeding a shading
+      parameter every frame, not just a one-shot flash
+- [x] Concentrate effects: emissive eyes feed the existing bloom pass for free (values >1
+      linear); a small particle burst fires on every non-lethal hit, not just the kill
+      (`particles.burst`, `main.ts`); death is a bigger 36-particle burst plus 3 gems, versus
+      the regular slime's 14/1; distinct shading from Worley-perturbed jagged hide + horns
+      (`bossBody`, `src/sprite.ts`) instead of the regular slime's smooth FBm wobble — same
+      "one noise field, many uses" idea, now a fourth/fifth use
+- [x] Melee swing and the fireball generalized to hit either enemy (`TorchAttack.update`,
+      `Fireball.update` now take a `Mob[]` of targets) instead of forking a second combat path
 
 ### Phase E6 — pro tier (only if budget remains)
 - [ ] Cheap SSAO: blur depth buffer − depth, scale/clamp, darken (Advanced deck fake)
 - [ ] Shadows: 1D shadow map from the torch, or blob shadows under mobs (shadow-map slides)
-- [ ] Minimap: top-down grid beside the first-person view — the 2D→projection
-      relationship made literally visible for the grader
+- [x] Minimap: top-down grid beside the first-person view — the 2D→projection relationship
+      made literally visible for the grader (`src/minimap.ts`, wired into `main.ts`, canvas
+      added in `index.html`). Drawn straight to a real 2D canvas context, deliberately
+      outside the linear-light framebuffer pipeline — same convention as the HUD icon
+      painter (`paintIcon`), since it's flat UI, not a lit part of the 3D scene. Shows the
+      whole generated map always (no fog-of-war/exploration reveal — that's a roguelike
+      mechanic with no lecture technique behind it, out of scope); marks the key (while
+      uncollected), the regular mob, and the boss (while alive), plus a rotating triangle
+      for the player's position/facing
 - [ ] Lava pit hazard: metaballs/marching squares over a thresholded noise field

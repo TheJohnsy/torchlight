@@ -1,4 +1,5 @@
 import { LinearFramebuffer } from "./framebuffer";
+import { fbm2, worley2 } from "./noise";
 import { Player } from "./player";
 import { PLANE_HALF } from "./raycaster";
 import type { Color } from "./types";
@@ -147,5 +148,139 @@ export function keyTexel(u: number, v: number, out: Color): number {
   out.r = 1.0 * glow;
   out.g = 0.78 * glow;
   out.b = 0.28 * glow;
+  return 1;
+}
+
+/**
+ * Procedural slime mob (roadmap E1): a squashed blob whose edge is perturbed by FBm noise
+ * sampled around its silhouette angle — the same noise field that shapes stone walls, now
+ * warping a creature's outline instead of a height map, so no two slimes (or frames) trace
+ * a mechanically perfect ellipse. Two dark eye dots read as a face. Not emissive — this is
+ * a creature, not a light source, unlike the key/gems.
+ */
+export function mobTexel(u: number, v: number, out: Color): number {
+  // Body: an ellipse squashed toward the floor, center low in the tile.
+  const dx = (u - 0.5) / 0.36;
+  const dy = (v - 0.34) / 0.3;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  const wobble = fbm2(Math.cos(angle) * 3 + 11, Math.sin(angle) * 3 + 5, 2) - 0.5; // [-0.5,0.5]
+  if (r > 1 + wobble * 0.3) return 0;
+
+  // Eyes: two small dark ovals above center.
+  const eyeDy = v - 0.42;
+  const leftEye = (u - 0.42) ** 2 / 0.0006 + (eyeDy * eyeDy) / 0.0012;
+  const rightEye = (u - 0.58) ** 2 / 0.0006 + (eyeDy * eyeDy) / 0.0012;
+  if (leftEye <= 1 || rightEye <= 1) {
+    out.r = out.g = out.b = 0.03;
+    return 1;
+  }
+
+  // Body shading: darker near the base, a pale wet highlight near the upper-left.
+  const shade = 0.5 + 0.5 * (v - 0.1);
+  const highlight = Math.max(0, 1 - ((u - 0.38) ** 2 + (v - 0.55) ** 2) / 0.02) * 0.4;
+  out.r = 0.1 * shade + highlight * 0.3;
+  out.g = 0.42 * shade + highlight * 0.4;
+  out.b = 0.14 * shade + highlight * 0.3;
+  return 1;
+}
+
+/**
+ * Boss slime (roadmap E5 — "distinct shading"): the same billboard blob idea as mobTexel,
+ * scaled up in main.ts's sprite size and reskinned with WORLEY-perturbed cracked plates
+ * instead of the regular slime's smooth FBm wobble — a genuinely different noise family for
+ * the hide, not a recolor. Twin back horns read as "boss" at a glance. Eyes are emissive;
+ * `eyeGlow` is supplied per-frame by makeBossTexel() so bloom picks them up and their
+ * brightness tracks remaining HP (the health-driven emissive pulse).
+ */
+function bossBody(u: number, v: number, out: Color, eyeGlow: number): number {
+  const dx = (u - 0.5) / 0.4;
+  const dy = (v - 0.4) / 0.36;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  // Worley distance around the silhouette angle reads as jagged cracked plates, unlike the
+  // regular slime's smooth FBm wobble (same trick, different noise family — roadmap E4/E5).
+  const w = worley2(Math.cos(angle) * 4 + 71, Math.sin(angle) * 4 + 23);
+  const wobble = Math.min(0.4, w) - 0.2; // roughly [-0.2, 0.2]
+  const inBody = r <= 1 + wobble * 0.5;
+
+  // Horns: two triangular spikes above the body, splayed outward.
+  const hornL = v > 0.68 && v < 0.95 && u < 0.34 - (v - 0.68) * 0.6 && u > 0.14;
+  const hornR = v > 0.68 && v < 0.95 && u > 0.66 + (v - 0.68) * 0.6 && u < 0.86;
+  if (!inBody && !hornL && !hornR) return 0;
+
+  // Eyes: bigger than the regular slime's, glowing hotter as HP drops.
+  const eyeDy = v - 0.4;
+  const leftEye = (u - 0.38) ** 2 / 0.0014 + (eyeDy * eyeDy) / 0.0022;
+  const rightEye = (u - 0.62) ** 2 / 0.0014 + (eyeDy * eyeDy) / 0.0022;
+  if (leftEye <= 1 || rightEye <= 1) {
+    out.r = eyeGlow;
+    out.g = eyeGlow * 0.15;
+    out.b = eyeGlow * 0.1;
+    return 1;
+  }
+  if (hornL || hornR) {
+    out.r = 0.25;
+    out.g = 0.08;
+    out.b = 0.1;
+    return 1;
+  }
+  const shade = 0.45 + 0.55 * (v - 0.05);
+  out.r = 0.35 * shade;
+  out.g = 0.08 * shade;
+  out.b = 0.14 * shade;
+  return 1;
+}
+
+/**
+ * Builds this frame's boss texel: eye glow starts a calm dim red and pulses brighter/faster
+ * as `hpFrac` (Mob.hp / Mob.maxHp) falls toward 0 — a game-state value driving a shading
+ * parameter directly, the "health-driven emissive pulse" roadmap bullet.
+ */
+export function makeBossTexel(hpFrac: number, tSec: number): SpriteTexel {
+  const pulseRate = 2 + (1 - hpFrac) * 10; // calm at full HP, frantic near death
+  const pulse = 0.5 + 0.5 * Math.sin(tSec * pulseRate);
+  const eyeGlow = 1.4 + (1 - hpFrac) * 3 * pulse; // always >1 so it always blooms, hotter when hurt
+  return (u: number, v: number, out: Color): number => bossBody(u, v, out, eyeGlow);
+}
+
+/** The key's idle float — a slow bob, same role as the mob's Mob.bobOffset(). */
+export function keyFloat(t: number): number {
+  return Math.sin(t * 2) * 0.04;
+}
+
+/**
+ * HUD heart (roadmap E1.5 player hearts): two circular lobes + a tapering triangle point,
+ * the classic heart silhouette built from the same SDF-composition style as gem/key. Drawn
+ * both in-HUD (via paintIcon, reusing its existing `dim` ghost styling for a lost heart) and
+ * nowhere in-world — hearts are a HUD-only readout, not a world pickup.
+ */
+export function heartTexel(u: number, v: number, out: Color): number {
+  const cx1 = 0.32, cx2 = 0.68, cy = 0.62, r = 0.22;
+  const d1 = (u - cx1) ** 2 + (v - cy) ** 2;
+  const d2 = (u - cx2) ** 2 + (v - cy) ** 2;
+  const inLobes = d1 <= r * r || d2 <= r * r;
+  const tipY = 0.12;
+  const halfWidthAt = (vv: number) => 0.34 * Math.max(0, (vv - tipY) / (cy - tipY));
+  const inTri = v <= cy && v >= tipY && Math.abs(u - 0.5) <= halfWidthAt(v);
+  if (!inLobes && !inTri) return 0;
+  out.r = 0.85;
+  out.g = 0.12;
+  out.b = 0.18;
+  return 1;
+}
+
+/**
+ * The fireball skill's bolt (roadmap E1.5 — "IS E3's projectile"): a soft hot core, emissive
+ * (>1 linear red) so it feeds the bloom pass exactly like the key/gems, just orange-hot
+ * instead of gold/emerald. Trail ghosts reuse this same texel, just drawn smaller/dimmer.
+ */
+export function fireTexel(u: number, v: number, out: Color): number {
+  const d = Math.hypot(u - 0.5, v - 0.5);
+  if (d > 0.5) return 0;
+  const heat = 1 - d / 0.5;
+  out.r = 1.2 + 1.2 * heat;
+  out.g = 0.5 + 0.9 * heat * heat;
+  out.b = 0.15 * heat * heat;
   return 1;
 }

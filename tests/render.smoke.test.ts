@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { defaultSettings, type RenderMode } from "../src/debug";
 import { downsampleInto, LinearFramebuffer, linearToByte } from "../src/framebuffer";
 import { Cell, level1 } from "../src/map";
-import { BrickMaterial, CeilingMaterial, FloorMaterial, StoneMaterial } from "../src/material";
+import {
+  BrickMaterial,
+  CeilingMaterial,
+  CrackedStoneMaterial,
+  DoorMaterial,
+  FloorMaterial,
+  MarbleMaterial,
+  StoneMaterial,
+} from "../src/material";
 import { Player } from "../src/player";
 import { Raycaster, type MaterialSet } from "../src/raycaster";
 import { BakedSampler } from "../src/sampler";
@@ -25,6 +33,7 @@ const materials: MaterialSet = {
   walls: new Map([
     [Cell.Stone, new BakedSampler(new StoneMaterial(), 128)],
     [Cell.Brick, new BakedSampler(new BrickMaterial(), 128)],
+    [Cell.Door, new BakedSampler(new DoorMaterial(), 128)],
   ]),
   floor: new BakedSampler(new FloorMaterial(), 128),
   ceiling: new BakedSampler(new CeilingMaterial(), 128),
@@ -134,6 +143,30 @@ describe("full-pipeline smoke render", () => {
     expect(golden).toBeGreaterThan(20);
   });
 
+  it("renders the slime mob sprite into a generated dungeon with real wall depth", async () => {
+    const { mobTexel, renderSprite } = await import("../src/sprite");
+    const { generateDungeon } = await import("../src/mapgen");
+    const { map: genMap, placements } = generateDungeon(7);
+    const genCaster = new Raycaster(fb, genMap);
+    const settings = defaultSettings();
+    // Stand half a tile west of the mob, facing it (east = angle 0) — close enough to stay
+    // inside the mob's own floor tile, so there's no wall in between regardless of seed.
+    const player = new Player(placements.mob.x - 0.5, placements.mob.y, 0);
+    genCaster.render(player, materials, settings);
+    renderSprite(fb, genCaster.depth, player, placements.mob.x, placements.mob.y, mobTexel, {
+      size: 0.5,
+      zCenter: 0.25,
+    });
+    dumpPPM("mob-sprite");
+
+    // Slime green: some pixel should have g clearly leading r and b (unlike stone/floor).
+    let slimeGreen = 0;
+    for (let i = 0; i < fb.data.length; i += 3) {
+      if (fb.data[i + 1] > fb.data[i] * 1.5 && fb.data[i + 1] > fb.data[i + 2] * 1.5) slimeGreen++;
+    }
+    expect(slimeGreen).toBeGreaterThan(20);
+  });
+
   it("renders a procedurally generated dungeon end-to-end", async () => {
     const { generateDungeon } = await import("../src/mapgen");
     const { map: genMap, placements } = generateDungeon(7);
@@ -168,6 +201,101 @@ describe("full-pipeline smoke render", () => {
     // The highlight and falloff must crawl across a good chunk of the frame — this is
     // the "shadows dance with the flame" effect, so a near-identical frame is a failure.
     expect(changed / (base.length / 3)).toBeGreaterThan(0.2);
+  });
+
+  it("a mid-swing doorProgress pulses the vault door with an unlock glow", () => {
+    // Stand in the room above the door (18,11), facing straight down at it.
+    const player = new Player(18.5, 10.9, Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings, undefined, 0); // shut, no glow
+    const shut = Float32Array.from(fb.data);
+    raycaster.render(player, materials, settings, undefined, 0.3); // mid-swing
+    dumpPPM("door-glow");
+
+    let changed = 0;
+    for (let i = 0; i < shut.length; i++) {
+      if (Math.abs(fb.data[i] - shut[i]) > 0.01) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+
+  it("doorProgress 0 and 1 both render with no glow (shut vs. fully open, no mid-pulse)", () => {
+    const player = new Player(18.5, 10.9, Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings, undefined, 0);
+    const at0 = Float32Array.from(fb.data);
+    raycaster.render(player, materials, settings, undefined, 1);
+    const at1 = Float32Array.from(fb.data);
+    // Same door material/lighting either way — only the mid-swing pulse should differ.
+    for (let i = 0; i < at0.length; i++) {
+      expect(at1[i]).toBeCloseTo(at0[i], 5);
+    }
+  });
+
+  it("a vaultFloor region override swaps the floor material only inside its bounds (roadmap E4)", () => {
+    // Look straight down at the floor from inside the vault (bottom-right room, LEVEL_1).
+    const player = new Player(20, 13.5, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withVaultFloor: MaterialSet = {
+      ...materials,
+      vaultFloor: {
+        sampler: new BakedSampler(new MarbleMaterial(), 128),
+        bounds: { x0: 18, y0: 12, x1: 23, y1: 15 }, // VAULT, from game.ts
+      },
+    };
+    raycaster.render(player, withVaultFloor, settings);
+    dumpPPM("vault-floor-marble");
+
+    let changed = 0;
+    for (let i = 0; i < plain.length; i++) {
+      if (Math.abs(fb.data[i] - plain[i]) > 0.01) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+
+  it("a vaultFloor override leaves floor OUTSIDE its bounds untouched", () => {
+    // Same look-straight-down setup, but from the spawn room — well outside the vault rect.
+    const player = new Player(2, 2, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withVaultFloor: MaterialSet = {
+      ...materials,
+      vaultFloor: {
+        sampler: new BakedSampler(new MarbleMaterial(), 128),
+        bounds: { x0: 18, y0: 12, x1: 23, y1: 15 },
+      },
+    };
+    raycaster.render(player, withVaultFloor, settings);
+    expect(Array.from(fb.data)).toEqual(Array.from(plain));
+  });
+
+  it("a crackedStone region override swaps ONLY Stone walls inside its bounds (roadmap E4)", () => {
+    // Face straight up at the top border wall (all Stone) from just inside it.
+    const player = new Player(5, 1.4, -Math.PI / 2);
+    const settings = defaultSettings();
+    raycaster.render(player, materials, settings);
+    const plain = Float32Array.from(fb.data);
+
+    const withCracked: MaterialSet = {
+      ...materials,
+      crackedStone: {
+        sampler: new BakedSampler(new CrackedStoneMaterial(), 128),
+        bounds: { x0: 0, y0: 0, x1: 24, y1: 1 }, // the whole top wall row
+      },
+    };
+    raycaster.render(player, withCracked, settings);
+    dumpPPM("cracked-stone-band");
+
+    let changed = 0;
+    for (let i = 0; i < plain.length; i++) {
+      if (Math.abs(fb.data[i] - plain[i]) > 0.01) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
   });
 
   it("depth buffer holds sane perpendicular distances after a frame", () => {
